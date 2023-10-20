@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from DataBaseConnection import connect
 
 #Codifique mucho unu
-#Multiverso del inseimuel
+#Multiverso del Gibran
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'ClaveSecreta'
 
