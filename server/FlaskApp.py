@@ -2,7 +2,7 @@ from flask import Flask, request, jsonify, session
 import jwt
 import secrets
 from datetime import datetime, timedelta
-from DataBaseConnection import connect
+from DataBaseConnection import DB
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'ClaveSecreta'
@@ -58,20 +58,20 @@ def registro():
 
     if (dataBaseSave):
         # Conectar a la base de datos
-        newConnection = connect()
+        newConnection = DB.__connect_and_execute()
 
         # Crear un cursor para ejecutar consultas
         cursor = newConnection.cursor()
 
         # Verificar que el correo no existe en la base de datos
-        cursor.execute("SELECT * FROM usuario WHERE correo = %s", (mail,))
+        cursor.execute("SELECT * FROM usuario WHERE correo_electronico = %s", (mail,))
         if cursor.fetchone():
             cursor.close()
             newConnection.close()
             return jsonify({'mensaje': 'El correo ya está registrado'}), 400
 
         # Verificar que el nombre de usuario no se repita
-        cursor.execute("SELECT * FROM usuario WHERE usuario = %s", (username,))
+        cursor.execute("SELECT * FROM usuario WHERE username = %s", (username,))
         if cursor.fetchone():
             cursor.close()
             newConnection.close()
@@ -98,8 +98,8 @@ def registro():
 
         # Ejecutar el INSERT INTO en la tabla de usuarios
         cursor.execute(
-            "INSERT INTO usuario (id_user, nombre, apellido, usuario, correo, contraseña, year, month, day) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
-            (iduser, firstname, lastname, username, mail, password, year, month, day)
+            "INSERT INTO usuario (id_usuario, username, nombre, apellido, correo_electronico, contrasena_hash, fecha_nacimiento, biografia, sexo) VALUES (%d, %s, %s, %s, %s, %s, %s, %s)",
+            (iduser, username, firstname, lastname, mail, password, datetime(year, month, day), None, None)
         )
 
         # Confirmar la transacción
@@ -142,7 +142,7 @@ def login():
     cursor = newConnection.cursor(dictionary=True)
 
     # Buscar al usuario por correo y contraseña
-    consulta = "SELECT * FROM mail WHERE password = %s AND contraseña = %s"
+    consulta = "SELECT * FROM mail WHERE correo_electronico = %s AND contrasena_hash = %s"
     cursor.execute(consulta, (mail, password))
 
     userinfo = cursor.fetchone()
