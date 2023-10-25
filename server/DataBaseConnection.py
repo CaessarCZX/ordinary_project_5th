@@ -21,7 +21,7 @@ class DB:
             password=self.__password
         )
         cursor = connection.cursor()
-        return connection
+       
         # Crea la base de datos si no existe
         cursor.execute(f"CREATE DATABASE IF NOT EXISTS {self.__db}")
 
