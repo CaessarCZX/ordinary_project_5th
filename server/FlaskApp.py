@@ -1,17 +1,18 @@
 from flask import Flask, request, jsonify, session
 import jwt
 import secrets
+import bcrypt
 from datetime import datetime, timedelta
-from DataBaseConnection import connect
+import DataBaseConnection
 
 #Codifique mucho unu
 #Multiverso del Gibran
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'ClaveSecreta'
+app.config['SECRET_KEY'] = secrets.token_hex(32)
 
 #Modelo del usuario
 class User:
-    def __init__(self, iduser, firstname, lastname, username, mail, password, year, month, day):
+    def __init__(self, iduser, firstname, lastname, username, mail, password, year, month, day, profile, biography, sex):
         self.iduser = iduser
         self.firstname = firstname
         self.lastname = lastname
@@ -21,6 +22,9 @@ class User:
         self.year = year
         self.month = month
         self.day = day
+        self.profile = profile
+        self.biography = biography
+        self.sex = sex
     
     def print_info(self):
         print(f"Usuario ID: {self.usuario_id}")
@@ -29,11 +33,12 @@ class User:
         print(f"Password: {self.password}")
         print(f"Fecha de nacimiento: {self.year}/{self.month}/{self.day}")
     
-    def change_username(self, newusername):
-        self.username = newusername
-    
-    def change_password(self, newpassword):
-        self.password = newpassword
+    def edit_profile(self, newUsername, newPassword, newProfile, newBiography, newSex):
+        self.username = newUsername
+        self.password = newPassword
+        self.profile = newProfile
+        self.biography = newBiography
+        self.sex = newSex
 
     #Ejemplos de posibles metodos
     def add_social(self, networksocial):
@@ -46,82 +51,92 @@ class User:
 # Ruta de registro
 @app.route('/register', methods=['POST'])
 def registro():
+    #Ejemplo de registro: http://127.0.0.1:8000/register?firstname=Samuel Antonio&lastname=Cayetano Pérez&username=Darstick&mail=sami_cayetano@hotmail.com&password=1234567&year=2003&month=10&day=10
+    
     # Obtener datos del formulario de registro
+    iduser = secrets.token_hex(4)
     firstname = request.form.get('firstname')
     lastname = request.form.get('lastname')
     username = request.form.get('username')
+    username =  username.lower().strip()
     mail = request.form.get('mail')
     password = request.form.get('password')
+    hashedpassword = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
     year = request.form.get('year')
     month = request.form.get('month')
-    day = request.form.get('day')   
-    # Conectar a la base de datos
-    newConnection = connect()
-
-    # Crear un cursor para ejecutar consultas
-    cursor = newConnection.cursor()
-
-    # Verificar que el correo no existe en la base de datos
-    cursor.execute("SELECT * FROM usuario WHERE correo = %s", (mail,))
-    if cursor.fetchone():
-        cursor.close()
-        newConnection.close()
-        return jsonify({'mensaje': 'El correo ya está registrado'}), 400
-
-    # Verificar que el nombre de usuario no se repita
-    cursor.execute("SELECT * FROM usuario WHERE usuario = %s", (username,))
-    if cursor.fetchone():
-        cursor.close()
-        newConnection.close()
-        return jsonify({'mensaje': 'El nombre de usuario ya está en uso'}), 400
-    
-    # Verificar que la contraseña tenga al menos 6 caracteres
-    if len(password) < 6:
-        cursor.close()
-        newConnection.close()
-        return jsonify({'mensaje': 'La contraseña debe tener al menos 6 caracteres'}), 400
-
-    # Verificar que el usuario sea mayor de 15 años
-    from datetime import date
-    today = date.today()
-    edad = today.year - year - ((today.month, today.day) < (month, day))
-    if edad < 15:
-        cursor.close()
-        newConnection.close()
-        return jsonify({'mensaje': 'Debes tener al menos 15 años para registrarte'}), 400
+    day = request.form.get('day')
+    dataBaseConnection = False
 
     # Crear instancia de Usuario
-    iduser = secrets.token_hex(4)
     newUser = User(iduser, firstname, lastname, username, mail, password, year, month, day)
 
-    # Ejecutar el INSERT INTO en la tabla de usuarios
-    cursor.execute(
-        "INSERT INTO usuario (id_user, nombre, apellido, usuario, correo, contraseña, year, month, day) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
-        (iduser, firstname, lastname, username, mail, password, year, month, day)
-    )
+    if (dataBaseConnection == True):
+        # Conectar a la base de datos
+        newConnection = DataBaseConnection.db.__connect_and_execute()
 
-    # Confirmar la transacción
-    newConnection.commit()
+        # Crear un cursor para ejecutar consultas
+        cursor = newConnection.cursor()
 
-    # Cerrar el cursor y la conexión
-    cursor.close()
-    newConnection.close()
+        # Verificar que el correo no existe en la base de datos
+        cursor.execute("SELECT * FROM usuarios WHERE correo = %s", (mail,))
+        if cursor.fetchone():
+            cursor.close()
+            newConnection.close()
+            return jsonify({'mensaje': 'El correo ya está registrado'}), 400
 
-    # Simplemente almacenaremos los datos en sesión
+        # Verificar que el nombre de usuario no se repita
+        cursor.execute("SELECT * FROM usuarios WHERE usuario = %s", (username,))
+        if cursor.fetchone():
+            cursor.close()
+            newConnection.close()
+            return jsonify({'mensaje': 'El nombre de usuario ya está en uso'}), 400
+    
+        # Verificar que la contraseña tenga al menos 6 caracteres
+        if len(password) < 8:
+            cursor.close()
+            newConnection.close()
+            return jsonify({'mensaje': 'La contraseña debe tener al menos 8 caracteres'}), 400
+
+        # Verificar que el usuario sea mayor de 15 años
+        from datetime import date
+        today = date.today()
+        edad = today.year - year - ((today.month, today.day) < (month, day))
+        if edad < 15:
+            cursor.close()
+            newConnection.close()
+            return jsonify({'mensaje': 'Debes tener al menos 15 años para registrarte'}), 400
+
+        # Ejecutar el INSERT INTO en la tabla de usuarios
+        cursor.execute(
+            "INSERT INTO usuario (id_user, nombre, apellido, usuario, correo, contraseña, year, month, day) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+            (iduser, firstname, lastname, username, mail, hashedpassword, year, month, day)
+        )
+
+        # Confirmar la transacción
+        newConnection.commit()
+
+        # Cerrar el cursor y la conexión
+        cursor.close()
+        newConnection.close()
+
+    # Almacenar los datos en sesión
     userinfo = {
         'idUser': iduser,
         'firstName': firstname,
         'lastName': lastname, 
         'username': username, 
         'mail': mail,
-        'password': password,
+        'password': ' ',
         'year': year,
         'month': month,
         'day': day
     }
     session['user'] = userinfo
-
-    token = jwt.encode({'userToken': userinfo['username'], 'exp': datetime.utcnow() + timedelta(hours=1)}, app.config['ClaveSecreta'], algorithm='HS256')
+    payload = {
+        'user_id': iduser,
+        'exp': datetime.utcnow() + timedelta(hours=1)  # El token expira en 1 hora
+    }
+    token = jwt.encode(payload, 'SECRET_KEY', algorithm='HS256')
     response = jsonify({'mensaje': '¡Registro exitoso!', 'token': token, 'user': userinfo})
     response.set_cookie('token', token)
     return response
@@ -134,16 +149,17 @@ def login():
     password = request.form.get('password')
 
     # Conectar a la base de datos
-    newConnection = connect()
+    newConnection = DataBaseConnection.db.__connect_and_execute()
 
     # Crear un cursor para ejecutar consultas
     cursor = newConnection.cursor(dictionary=True)
 
     # Buscar al usuario por correo y contraseña
-    consulta = "SELECT * FROM mail WHERE password = %s AND contraseña = %s"
+    consulta = "SELECT * FROM usuarios WHERE password = %s AND contraseña = %s"
     cursor.execute(consulta, (mail, password))
 
     userinfo = cursor.fetchone()
+
 
     if userinfo:
         # Si las credenciales son válidas, almacenar el usuario en sesión
@@ -164,7 +180,11 @@ def login():
         cursor.close()
         newConnection.close()
 
-        token = jwt.encode({'userToken': userinfo[3], 'exp': datetime.utcnow() + timedelta(hours=1)}, app.config['ClaveSecreta'], algorithm='HS256')
+        payload = {
+            'user_id': userinfo[0],
+            'exp': datetime.utcnow() + timedelta(hours=1)  # El token expira en 1 hora
+        }
+        token = jwt.encode(payload, 'SECRET_KEY', algorithm='HS256')
         response = jsonify({'mensaje': '¡Inicio de sesión exitoso!', 'token': token, 'usuario': userinfo})
         response.set_cookie('token', token)
         return response
@@ -226,8 +246,7 @@ def crear_post():
         imagename = f"{username}_{datetime.now().strftime('%Y%m%d%H%M%S')}.jpg"
         image.save(f"ruta/del/directorio/{imagename}")
 
-    # Almacenar la publicación en la base de datos
-    # y asociarla al usuario y la imagen (si existe)
+    # Almacenar la publicación en la base de datos y asociarla al usuario y la imagen
 
     # Retornar los datos proporcionados
     postinfo = {
@@ -253,8 +272,7 @@ def create_comment():
     if len(text) > 100:
         return jsonify({'mensaje': 'El comentario debe tener menos de 100 caracteres'}), 400
 
-    # Almacenar el comentario en la base de datos
-    # y asociarlo a la publicación y al usuario
+    # Almacenar el comentario en la base de datos y asociarlo a la publicación y al usuario
 
     # Por ahora, simplemente retornamos los datos proporcionados
     commentinfo = {
