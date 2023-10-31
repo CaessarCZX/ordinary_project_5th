@@ -21,7 +21,6 @@ class DB:
             password=self.__password
         )
         cursor = connection.cursor()
-
         # Crea la base de datos si no existe
         cursor.execute(f"CREATE DATABASE IF NOT EXISTS {self.__db}")
 
@@ -51,7 +50,6 @@ class DB:
                 FOREIGN KEY(id_usuario) REFERENCES usuarios(id_usuario) ON UPDATE CASCADE ON DELETE CASCADE,
                 contenido_publicacion TEXT,
                 fecha_depublicacion DATETIME DEFAULT CURRENT_TIMESTAMP,
-                titulo VARCHAR(50) NOT NULL,
                 imagen VARCHAR(90),
                 reaccion INT
             )
@@ -91,7 +89,7 @@ class DB:
         # Conectar y ejecutar las consultas
         self.__connect_and_execute(tables_queries)
 
-    def __connect_and_execute(self, queries):
+    def __connect_and_execute(self):
         connection = mysql.connector.connect(
             user=self.__user,
             password=self.__password,
@@ -99,15 +97,7 @@ class DB:
             database=self.__db,
             port=self.__port
         )
-
-        cursor = connection.cursor()
-
-        for q in queries:
-            cursor.execute(q)
-
-        connection.commit()
-        cursor.close()
-        connection.close()
+        return connection
 
 # Crear una instancia de la clase DB para verificar y crear la base de datos y las tablas
 db = DB()
