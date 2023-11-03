@@ -150,13 +150,13 @@ def login():
     password = request.form.get('password')
 
     # Conectar a la base de datos
-    newConnection = db.connect_and_execute()
+    newConnection = db.connect_and_execute(["SELECT * FROM usuarios"])
 
     # Crear un cursor para ejecutar consultas
     cursor = newConnection.cursor(dictionary=True)
 
     # Buscar al usuario por correo y contraseña
-    consulta = "SELECT * FROM usuarios WHERE password = %s AND contraseña = %s"
+    consulta = "SELECT * FROM usuarios WHERE correo_electronico = %s AND contrasena_hash = %s"
     cursor.execute(consulta, (mail, password))
 
     userinfo = cursor.fetchone()
@@ -248,7 +248,7 @@ def crear_post():
         image.save(f"ruta/del/directorio/{imagename}")
 
     # Conectar a la base de datos
-    newConnection = db.connect_and_execute()
+    newConnection = db.connect_and_execute(["SELECT * FROM usuarios"])
 
     # Crear un cursor para ejecutar consultas
     cursor = newConnection.cursor()
