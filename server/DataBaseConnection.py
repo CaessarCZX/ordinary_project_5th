@@ -41,7 +41,8 @@ class DB:
                 contrasena_hash VARCHAR(128),
                 fecha_nacimiento DATE,
                 biografia TEXT,
-                sexo VARCHAR(30)
+                sexo VARCHAR(30),
+                fotoperfil VARCHAR (90)
             )
             """,
             """
@@ -87,8 +88,7 @@ class DB:
             )
             """
         ]
-
-        # Conectar y ejecutar las consultas
+      # Conectar y ejecutar las consultas
         self.__connect_and_execute(tables_queries)
 
     def __connect_and_execute(self, queries):
@@ -99,7 +99,7 @@ class DB:
             database=self.__db,
             port=self.__port
         )
-
+        
         cursor = connection.cursor()
 
         for q in queries:
@@ -108,6 +108,7 @@ class DB:
         connection.commit()
         cursor.close()
         connection.close()
+        return connection
 
 # Crear una instancia de la clase DB para verificar y crear la base de datos y las tablas
 db = DB()
