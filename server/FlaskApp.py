@@ -1,12 +1,16 @@
 from flask import Flask, request, jsonify, session
 import jwt
 import secrets
+import random
 import bcrypt
 from datetime import datetime, timedelta
-import DataBaseConnection
+from DataBaseConnection import DB
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = secrets.token_hex(32)
+
+# Crear una instancia de la clase DB para verificar y crear la base de datos y las tablas
+db = DB()
 
 #Modelo del usuario
 class User:
@@ -52,7 +56,7 @@ def registro():
     #Ejemplo de registro: http://127.0.0.1:8000/register?firstname=Samuel Antonio&lastname=Cayetano Pérez&username=Darstick&mail=sami_cayetano@hotmail.com&password=1234567&year=2003&month=10&day=10
     
     # Obtener datos del formulario de registro
-    iduser = secrets.token_hex(4)
+    iduser = ''.join([str(random.randint(0, 9)) for _ in range(4)])
     firstname = request.form.get('firstname')
     lastname = request.form.get('lastname')
     username = request.form.get('username')
@@ -70,20 +74,20 @@ def registro():
 
     if (dataBaseConnection == True):
         # Conectar a la base de datos
-        newConnection = DataBaseConnection.db.__connect_and_execute()
+        newConnection = db.connect_and_execute(["SELECT * FROM usuarios"])
 
         # Crear un cursor para ejecutar consultas
         cursor = newConnection.cursor()
 
         # Verificar que el correo no existe en la base de datos
-        cursor.execute("SELECT * FROM usuarios WHERE correo = %s", (mail,))
+        cursor.execute("SELECT * FROM usuarios WHERE correo_electronico = %s", (mail,))
         if cursor.fetchone():
             cursor.close()
             newConnection.close()
             return jsonify({'mensaje': 'El correo ya está registrado'}), 400
 
         # Verificar que el nombre de usuario no se repita
-        cursor.execute("SELECT * FROM usuarios WHERE usuario = %s", (username,))
+        cursor.execute("SELECT * FROM usuarios WHERE username = %s", (username,))
         if cursor.fetchone():
             cursor.close()
             newConnection.close()
@@ -97,7 +101,8 @@ def registro():
 
         # Verificar que el usuario sea mayor de 15 años
         today = datetime.today()
-        edad = today.year - year - ((today.month, today.day) < (month, day))
+        
+        edad = today.year - int(year) - ((today.month, today.day) < (int(month), int(day)))
         if edad < 15:
             cursor.close()
             newConnection.close()
@@ -105,8 +110,8 @@ def registro():
 
         # Ejecutar el INSERT INTO en la tabla de usuarios
         cursor.execute(
-            "INSERT INTO usuario (id_usuario, nombre, apellido, usuario, correo_electronico, fecha_nacimiento, biografia, sexo) VALUES (%s, %s, %s, %s, %s, %s, %d, %s, %s)",
-            (iduser, firstname, lastname, username, mail, hashedpassword, datetime(year, month, day), None, None)
+            "INSERT INTO usuarios (id_usuario, username, nombre, apellido, correo_electronico, contrasena_hash, fecha_nacimiento, biografia, sexo) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
+            (iduser, username, firstname, lastname, mail, hashedpassword, f"{year}-{month}-{day}", None, None)
         )
 
         # Confirmar la transacción
@@ -145,7 +150,7 @@ def login():
     password = request.form.get('password')
 
     # Conectar a la base de datos
-    newConnection = DataBaseConnection.db.__connect_and_execute()
+    newConnection = db.connect_and_execute()
 
     # Crear un cursor para ejecutar consultas
     cursor = newConnection.cursor(dictionary=True)
@@ -243,7 +248,7 @@ def crear_post():
         image.save(f"ruta/del/directorio/{imagename}")
 
     # Conectar a la base de datos
-    newConnection = DataBaseConnection.db.__connect_and_execute()
+    newConnection = db.connect_and_execute()
 
     # Crear un cursor para ejecutar consultas
     cursor = newConnection.cursor()

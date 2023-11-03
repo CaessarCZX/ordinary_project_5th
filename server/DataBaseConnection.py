@@ -4,8 +4,9 @@ class DB:
     def __init__(self):
         self.__host = 'localhost'
         self.__user = 'root'
-        self.__password = 'arieljavier'  # Reemplaza con tu contraseña
-        self.__db = 'db_proyectofinal'  # Reemplaza con el nombre de tu base de datos
+        # self.__password = 'arieljavier'
+        self.__db = 'db_proyectofinal'
+        self.__password = '10102003'
         self.__port = '3306'
 
         # Conectar a la base de datos o crearla si no existe
@@ -87,9 +88,9 @@ class DB:
         ]
 
         # Conectar y ejecutar las consultas
-        self.__connect_and_execute(tables_queries)
+        self.connect_and_execute(tables_queries)
 
-    def __connect_and_execute(self):
+    def connect_and_execute(self, queries):
         connection = mysql.connector.connect(
             user=self.__user,
             password=self.__password,
@@ -97,7 +98,19 @@ class DB:
             database=self.__db,
             port=self.__port
         )
+
+        #Quitar o comentar desde el cursor hasta el connection.close() si ya tienes creada la base de datos.
+
+        cursor = connection.cursor()
+
+        if queries != None:
+            for q in queries:
+                cursor.execute(q)
+
+        connection.commit()
+        cursor.close()
+        connection.close()
+
         return connection
 
-# Crear una instancia de la clase DB para verificar y crear la base de datos y las tablas
 db = DB()
