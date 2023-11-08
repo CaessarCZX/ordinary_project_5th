@@ -4,9 +4,9 @@ class DB:
     def __init__(self):
         self.__host = 'localhost'
         self.__user = 'root'
-        # self.__password = 'arieljavier'
+        # self.__password = 'arieljavier' #Contraseña de Gibran
         self.__db = 'db_proyectofinal'
-        self.__password = '10102003'
+        self.__password = '10102003' #Contraseña de Samuel
         self.__port = '3306'
 
         # Conectar a la base de datos o crearla si no existe
@@ -40,6 +40,7 @@ class DB:
                 correo_electronico VARCHAR(80) UNIQUE,
                 contrasena_hash VARCHAR(128),
                 fecha_nacimiento DATE,
+                foto_perfil BLOB,
                 biografia TEXT,
                 sexo VARCHAR(30)
             )
@@ -51,7 +52,7 @@ class DB:
                 FOREIGN KEY(id_usuario) REFERENCES usuarios(id_usuario) ON UPDATE CASCADE ON DELETE CASCADE,
                 contenido_publicacion TEXT,
                 fecha_depublicacion DATETIME DEFAULT CURRENT_TIMESTAMP,
-                imagen VARCHAR(90),
+                imagen BLOB,
                 reaccion INT
             )
             """,
@@ -101,16 +102,35 @@ class DB:
 
         #Quitar o comentar desde el cursor hasta el connection.close() si ya tienes creada la base de datos.
 
+        if not self.tables_exist():
+            cursor = connection.cursor()
+
+            if queries != None:
+                for q in queries:
+                    cursor.execute(q)
+
+            connection.commit()
+            cursor.close()
+            connection.close()
+
+        return connection
+    
+    def tables_exist(self):
+        connection = mysql.connector.connect(
+            user=self.__user,
+            password=self.__password,
+            host=self.__host,
+            database=self.__db,
+            port=self.__port
+        )
         cursor = connection.cursor()
 
-        if queries != None:
-            for q in queries:
-                cursor.execute(q)
+        cursor.execute("SHOW TABLES")
+        tables = cursor.fetchall()
 
-        connection.commit()
         cursor.close()
         connection.close()
 
-        return connection
+        return len(tables) > 0
 
 db = DB()

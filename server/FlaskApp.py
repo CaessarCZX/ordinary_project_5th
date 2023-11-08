@@ -1,9 +1,12 @@
 from flask import Flask, request, jsonify, session
+import io
 import jwt
 import secrets
 import random
 import bcrypt
+import base64
 from datetime import datetime, timedelta
+from PIL import Image
 from DataBaseConnection import DB
 
 app = Flask(__name__)
@@ -56,14 +59,16 @@ def registro():
     #Ejemplo de registro: http://127.0.0.1:8000/register?firstname=Samuel Antonio&lastname=Cayetano Pérez&username=Darstick&mail=sami_cayetano@hotmail.com&password=1234567&year=2003&month=10&day=10
     
     # Obtener datos del formulario de registro
-    iduser = ''.join([str(random.randint(0, 9)) for _ in range(4)])
+    iduser = ''.join([str(random.randint(0, 9)) for _ in range(9)])
     firstname = request.form.get('firstname')
     lastname = request.form.get('lastname')
     username = request.form.get('username')
     username =  username.lower().strip()
     mail = request.form.get('mail')
     password = request.form.get('password')
-    hashedpassword = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
+    password = password.encode('utf-8')
+    sal = bcrypt.gensalt()
+    hashedpassword = bcrypt.hashpw(password, sal)
     year = request.form.get('year')
     month = request.form.get('month')
     day = request.form.get('day')
@@ -110,8 +115,8 @@ def registro():
 
         # Ejecutar el INSERT INTO en la tabla de usuarios
         cursor.execute(
-            "INSERT INTO usuarios (id_usuario, username, nombre, apellido, correo_electronico, contrasena_hash, fecha_nacimiento, biografia, sexo) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
-            (iduser, username, firstname, lastname, mail, hashedpassword, f"{year}-{month}-{day}", None, None)
+            "INSERT INTO usuarios (id_usuario, username, nombre, apellido, correo_electronico, contrasena_hash, fecha_nacimiento, foto_perfil, biografia, sexo) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+            (iduser, username, firstname, lastname, mail, hashedpassword, f"{year}-{month}-{day}", None, None, None)
         )
 
         # Confirmar la transacción
@@ -146,7 +151,7 @@ def registro():
 @app.route('/login', methods=['POST'])
 def login():
     # Obtener datos del formulario de login
-    mail = request.form.get('username')
+    mail = request.form.get('mail')
     password = request.form.get('password')
 
     # Conectar a la base de datos
@@ -156,46 +161,47 @@ def login():
     cursor = newConnection.cursor(dictionary=True)
 
     # Buscar al usuario por correo y contraseña
-    consulta = "SELECT * FROM usuarios WHERE correo_electronico = %s AND contrasena_hash = %s"
-    cursor.execute(consulta, (mail, password))
-
+    consulta = "SELECT * FROM usuarios WHERE correo_electronico = %s"
+    cursor.execute(consulta, (mail,))
     userinfo = cursor.fetchone()
 
-
     if userinfo:
-        # Si las credenciales son válidas, almacenar el usuario en sesión
-        userinfo = {
-            'iduser': userinfo[0],
-            'firstName': userinfo[1],
-            'lastName': userinfo[2],
-            'username': userinfo[3],
-            'mail': userinfo[4],
-            'password': userinfo[5],
-            'year': userinfo[6],
-            'month': userinfo[7],
-            'day': userinfo[8]
-        }
-        session['user'] = userinfo
+        hasedpassword = userinfo['contrasena_hash']
+        if bcrypt.checkpw(password.encode('utf-8'), hasedpassword.encode('utf-8')):
+            # Si las credenciales son válidas, almacenar el usuario en sesión
+            userinfo = {
+                'iduser': userinfo['id_usuario'],
+                'username': userinfo['username'],
+                'firstName': userinfo['nombre'],
+                'lastName': userinfo['apellido'],
+                'mail': userinfo['correo_electronico'],
+                'password': userinfo['contrasena_hash'],
+                'birthDate': userinfo['fecha_nacimiento'],
+                'profile': userinfo['foto_perfil'],
+                'biography': userinfo['biografia'],
+                'sex': userinfo['sexo']
+            }
+            session['user'] = userinfo
 
-        # Cerrar el cursor y la conexión
-        cursor.close()
-        newConnection.close()
+            # Cerrar el cursor y la conexión
+            cursor.close()
+            newConnection.close()
 
-        payload = {
-            'user_id': userinfo[0],
-            'exp': datetime.utcnow() + timedelta(hours=1)  # El token expira en 1 hora
-        }
-        token = jwt.encode(payload, 'SECRET_KEY', algorithm='HS256')
-        response = jsonify({'mensaje': '¡Inicio de sesión exitoso!', 'token': token, 'usuario': userinfo})
-        response.set_cookie('token', token)
-        return response
+            payload = {
+                'user_id': userinfo['iduser'],
+                'exp': datetime.utcnow() + timedelta(hours=1)  # El token expira en 1 hora
+            }
+            token = jwt.encode(payload, app.config['SECRET_KEY'], algorithm='HS256')
+            response = jsonify({'mensaje': '¡Inicio de sesión exitoso!', 'token': token, 'usuario': userinfo})
+            response.set_cookie('token', token)
+            return response
 
     # Si las credenciales no son válidas
     cursor.close()
     newConnection.close()
     return jsonify({'mensaje': 'Credenciales incorrectas'}), 401
 
-# Ruta para obtener el estado de sesión actual
+# Ruta para mantener la sesión activa
 @app.route('/keep_session', methods=['GET'])
 def keep_session():
     token = request.cookies.get('token')
@@ -203,17 +209,22 @@ def keep_session():
     if token:
         try:
             # Decodifica el token
-            payload = jwt.decode(token, 'SECRET_KEY', algorithms=['HS256'])
-            userToken = payload['user_id']
+            payload = jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
+            print(payload)
+            userToken = payload['userToken']
 
-            # Genera un nuevo token
-            newtoken = jwt.encode({'userToken': userToken, 'exp': datetime.utcnow() + timedelta(hours=1)}, app.config['ClaveSecreta'], algorithm='HS256')
-
-            # Actualiza la cookie con el nuevo token
-            userinfo = session.get('user')
-            response = jsonify({'mensaje': '¡Inicio de sesión exitoso!', 'token': newtoken, 'usuario': userinfo})
+            # Genera un nuevo token y actualiza la cookie
+            newtoken = jwt.encode({'userToken': userToken, 'exp': datetime.utcnow() + timedelta(hours=1)}, app.config['SECRET_KEY'], algorithm='HS256')
+            response = jsonify({'mensaje': '¡Sesión actualizada!', 'token': newtoken})
             response.set_cookie('token', newtoken)
+
+            # También puedes devolver información del usuario si lo necesitas
+            userinfo = session.get('user')
+            if userinfo:
+                response['user'] = userinfo
+
             return response
+
         except jwt.ExpiredSignatureError:
             return jsonify({'mensaje': 'Token expirado'}), 401
         except jwt.InvalidTokenError:
@@ -225,15 +236,63 @@ def keep_session():
 @app.route('/logout', methods=['GET'])
 def logout():
     session.pop('user', None)
-    return jsonify({'mensaje': '¡Sesión cerrada exitosamente!'})
+    response = jsonify({'mensaje': '¡Sesión cerrada exitosamente!'})
+    response.delete_cookie('token')
+    return response
+
+@app.route('/get_posts', methods=['GET'])
+def get_posts():
+    offset = request.args.get('offset', 0, type=int)  # Obtiene el offset de la consulta
+    
+    # Conectar a la base de datos
+    newConnection = db.connect_and_execute(["SELECT * FROM publicaciones"])
+    cursor = newConnection.cursor()
+
+    # Obtener todas las publicaciones
+    cursor.execute("SELECT * FROM publicaciones ORDER BY fecha_depublicacion DESC LIMIT 10 OFFSET {offset}")
+    posts = cursor.fetchall()
+
+    # Lista para almacenar las publicaciones formateadas
+    postsformatted = []
+
+    for post in posts:
+        # Obtener el nombre del usuario
+        cursor.execute("SELECT username FROM usuarios WHERE id_usuario = %s", (post[1],))
+        username = cursor.fetchone()[0]
+
+        # Obtener la foto de perfil del usuario
+        cursor.execute("SELECT username FROM usuarios WHERE foto_perfil = %s", (post[1],))
+        profile = cursor.fetchone()[0]
+
+        # Decodificar la imagen
+        imagen_bytes = post[3]
+        imagen_decoded = imagen_bytes.decode('utf-8') if imagen_bytes else None
+
+        # Formatear la publicación
+        publicacion_formateada = {
+            'nombre_usuario': username,
+            'nombre_usuario': profile,
+            'fecha_depublicacion': post[2].strftime("%Y-%m-%d %H:%M:%S"),
+            'descripcion': post[4],
+            'imagen': imagen_decoded
+        }
+
+        # Agregar la publicación formateada a la lista
+        postsformatted.append(publicacion_formateada)
+
+    # Cerrar el cursor y la conexión
+    cursor.close()
+    newConnection.close()
+
+    return jsonify(postsformatted)
 
 # Ruta para crear publicaciones
 @app.route('/create_post', methods=['POST'])
-def crear_post():
+def create_post():
     # Obtener datos del formulario de la creacion de publicacion
-    idpost = secrets.token_hex(4)
-    iduser = session.get('user')
-    postdate = datetime.now
+    idpost = ''.join([str(random.randint(0, 9)) for _ in range(9)])
+    iduser = session['user']['iduser']
+    postdate = f"{datetime.today().year}-{datetime.today().month}-{datetime.today().day}"
     text = request.form.get('text')
     image = request.files.get('image')
 
@@ -242,31 +301,46 @@ def crear_post():
         return jsonify({'mensaje': 'El texto debe tener menos de 150 caracteres'}), 400
 
     # Asumiendo que la imagen es opcional y solo se almacena si se proporciona
-    imagename = None
+    imagebytes = None
     if image:
-        imagename = f"{iduser}_{datetime.now().strftime('%Y%m%d%H%M%S')}.jpg"
-        image.save(f"ruta/del/directorio/{imagename}")
+        if image:
+            # Cargar la imagen y comprimirla
+            with Image.open(image) as img:
+                # Reducir el tamaño y guardar en un nuevo objeto BytesIO
+                img = img.resize((800, 800))
+                output = io.BytesIO()
+                img.save(output, format='JPEG', quality=70)
+
+        # Convertir a Base64
+        imagebytes = base64.b64encode(output.getvalue()).decode('utf-8')
 
     # Conectar a la base de datos
-    newConnection = db.connect_and_execute(["SELECT * FROM usuarios"])
+    newConnection = db.connect_and_execute(["SELECT * FROM publicaciones"])
 
     # Crear un cursor para ejecutar consultas
     cursor = newConnection.cursor()
 
     # Ejecutar el INSERT INTO en la tabla de publicaciones
     cursor.execute(
-         "INSERT INTO usuario (id_publicacion, id_usuario, contenido_depublicacion, imagen, reaccion) VALUES (%s, %s, %s, %s, %s, %d)",
-        (idpost, iduser, text, datetime.today(), image, 0)
+         "INSERT INTO publicaciones (id_publicacion, id_usuario, contenido_publicacion, fecha_depublicacion, imagen, reaccion) VALUES (%s, %s, %s, %s, %s, %s)",
+        (idpost, iduser, text, f"{datetime.today().year}-{datetime.today().month}-{datetime.today().day}", imagebytes, 0)
     )
+
+    # Confirmar la transacción
+    newConnection.commit()
+
+    # Cerrar el cursor y la conexión
+    cursor.close()
+    newConnection.close()
 
     # Retornar los datos proporcionados
     postinfo = {
-        'idPublicacion': idpost,
-        'usuario': iduser,
-        'fechaPublicacion': postdate,
-        'texto': text,
-        'imagen': imagename,
-        'reaccion': 0
+        'idpost': idpost,
+        'iduser': iduser,
+        'datepost': postdate,
+        'text': text,
+        'image': imagebytes,
+        'reactions': 0
     }
 
     response = jsonify({'mensaje': '¡Publicación creada con éxito!', 'publicacion': postinfo})
