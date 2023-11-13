@@ -72,71 +72,72 @@ def registro():
     year = request.form.get('year')
     month = request.form.get('month')
     day = request.form.get('day')
-    dataBaseConnection = True
 
     # Crear instancia de Usuario
     newUser = User(iduser, firstname, lastname, username, mail, password, year, month, day, None, None, None)
 
-    if (dataBaseConnection == True):
-        # Conectar a la base de datos
-        newConnection = db.connect_and_execute(["SELECT * FROM usuarios"])
+    # Conectar a la base de datos
+    newConnection = db.connect_and_execute(["SELECT * FROM usuarios"])
 
-        # Crear un cursor para ejecutar consultas
-        cursor = newConnection.cursor()
+    # Crear un cursor para ejecutar consultas
+    cursor = newConnection.cursor()
 
-        # Verificar que el correo no existe en la base de datos
-        cursor.execute("SELECT * FROM usuarios WHERE correo_electronico = %s", (mail,))
-        if cursor.fetchone():
-            cursor.close()
-            newConnection.close()
-            return jsonify({'mensaje': 'El correo ya está registrado'}), 400
-
-        # Verificar que el nombre de usuario no se repita
-        cursor.execute("SELECT * FROM usuarios WHERE username = %s", (username,))
-        if cursor.fetchone():
-            cursor.close()
-            newConnection.close()
-            return jsonify({'mensaje': 'El nombre de usuario ya está en uso'}), 400
-    
-        # Verificar que la contraseña tenga al menos 6 caracteres
-        if len(password) < 8:
-            cursor.close()
-            newConnection.close()
-            return jsonify({'mensaje': 'La contraseña debe tener al menos 8 caracteres'}), 400
-
-        # Verificar que el usuario sea mayor de 15 años
-        today = datetime.today()
-        
-        edad = today.year - int(year) - ((today.month, today.day) < (int(month), int(day)))
-        if edad < 15:
-            cursor.close()
-            newConnection.close()
-            return jsonify({'mensaje': 'Debes tener al menos 15 años para registrarte'}), 400
-
-        # Ejecutar el INSERT INTO en la tabla de usuarios
-        cursor.execute(
-            "INSERT INTO usuarios (id_usuario, username, nombre, apellido, correo_electronico, contrasena_hash, fecha_nacimiento, foto_perfil, biografia, sexo) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
-            (iduser, username, firstname, lastname, mail, hashedpassword, f"{year}-{month}-{day}", None, None, None)
-        )
-
-        # Confirmar la transacción
-        newConnection.commit()
-
-        # Cerrar el cursor y la conexión
+    # Verificar que el correo no existe en la base de datos
+    cursor.execute("SELECT * FROM usuarios WHERE correo_electronico = %s", (mail,))
+    if cursor.fetchone():
         cursor.close()
         newConnection.close()
+        return jsonify({'mensaje': 'El correo ya está registrado'}), 400
+
+    # Verificar que el nombre de usuario no se repita
+    cursor.execute("SELECT * FROM usuarios WHERE username = %s", (username,))
+    if cursor.fetchone():
+        cursor.close()
+        newConnection.close()
+        return jsonify({'mensaje': 'El nombre de usuario ya está en uso'}), 400
+    
+    # Verificar que la contraseña tenga al menos 6 caracteres
+    if len(password) < 8:
+        cursor.close()
+        newConnection.close()
+        return jsonify({'mensaje': 'La contraseña debe tener al menos 8 caracteres'}), 400
+
+    # Verificar que el usuario sea mayor de 15 años
+    today = datetime.today()
+        
+    edad = today.year - int(year) - ((today.month, today.day) < (int(month), int(day)))
+    if edad < 15:
+        cursor.close()
+        newConnection.close()
+        return jsonify({'mensaje': 'Debes tener al menos 15 años para registrarte'}), 400
+
+    # Ejecutar el INSERT INTO en la tabla de usuarios
+    cursor.execute(
+        "INSERT INTO usuarios (id_usuario, username, nombre, apellido, correo_electronico, contrasena_hash, fecha_nacimiento, foto_perfil, biografia, sexo) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+        (iduser, username, firstname, lastname, mail, hashedpassword, f"{year}-{month}-{day}", ' ', ' ', ' ')
+    )
+
+    # Confirmar la transacción
+    newConnection.commit()
+
+    # Cerrar el cursor y la conexión
+    cursor.close()
+    newConnection.close()
 
     # Almacenar los datos en sesión
     userinfo = {
-        'idUser': iduser,
-        'firstName': firstname,
-        'lastName': lastname, 
+        'iduser': iduser,
+        'firstname': firstname,
+        'lastname': lastname, 
         'username': username, 
         'mail': mail,
         'password': ' ',
         'year': year,
         'month': month,
-        'day': day
+        'day': day,
+        'profile': ' ',
+        'biography': ' ',
+        'sex': ' '
     }
     session['user'] = userinfo
     payload = {
@@ -168,6 +169,10 @@ def login():
     if userinfo:
         hasedpassword = userinfo['contrasena_hash']
         if bcrypt.checkpw(password.encode('utf-8'), hasedpassword.encode('utf-8')):
+            if userinfo['foto_perfil']:
+                imagen_bytes = userinfo['foto_perfil']
+                decoded_image = imagen_bytes.decode('utf-8') if imagen_bytes else None
+            
             # Si las credenciales son válidas, almacenar el usuario en sesión
             userinfo = {
                 'iduser': userinfo['id_usuario'],
@@ -177,7 +182,7 @@ def login():
                 'mail': userinfo['correo_electronico'],
                 'password': userinfo['contrasena_hash'],
                 'birthDate': userinfo['fecha_nacimiento'],
-                'profile': userinfo['foto_perfil'],
+                'profile': decoded_image,
                 'biography': userinfo['biografia'],
                 'sex': userinfo['sexo']
             }
@@ -240,51 +245,136 @@ def logout():
     response.delete_cookie('token')
     return response
 
-@app.route('/get_posts', methods=['GET'])
-def get_posts():
-    offset = request.args.get('offset', 0, type=int)  # Obtiene el offset de la consulta
+@app.route('/get_user_session', methods=['GET'])
+def get_user_session():
+    userinfo = session.get('user')
+
+    if userinfo:
+        # Decodificar la contraseña hasheada a la original
+        userinfo['password'] = bcrypt.checkpw(session['user']['password'].encode('utf-8'), userinfo['password'].encode('utf-8'))
+
+        # Decodificar la imagen de perfil
+        if userinfo['profile']:
+            userinfo['profile'] = base64.b64decode(userinfo['profile'])
+
+        return jsonify({'user_info': userinfo})
+    else:
+        return jsonify({'mensaje': 'Usuario no autenticado'}), 401
     
+@app.route('/user/<int:id_usuario>', methods=['GET'])
+def view_user(id_user):
     # Conectar a la base de datos
-    newConnection = db.connect_and_execute(["SELECT * FROM publicaciones"])
-    cursor = newConnection.cursor()
+    newConnection = db.connect_and_execute(["SELECT * FROM usuario"])
 
-    # Obtener todas las publicaciones
-    cursor.execute("SELECT * FROM publicaciones ORDER BY fecha_depublicacion DESC LIMIT 10 OFFSET {offset}")
-    posts = cursor.fetchall()
+    # Crear un cursor para ejecutar consultas
+    cursor = newConnection.cursor(dictionary=True)
 
-    # Lista para almacenar las publicaciones formateadas
-    postsformatted = []
+    # Buscar el usuario por su ID
+    cursor.execute("SELECT * FROM usuario WHERE id_usuario = %s", (id_user,))
+    userinfo = cursor.fetchone()
 
-    for post in posts:
-        # Obtener el nombre del usuario
-        cursor.execute("SELECT username FROM usuarios WHERE id_usuario = %s", (post[1],))
-        username = cursor.fetchone()[0]
+    #Oculta contraseña
+    userinfo['contrasena_hash'] = ' '
 
-        # Obtener la foto de perfil del usuario
-        cursor.execute("SELECT username FROM usuarios WHERE foto_perfil = %s", (post[1],))
-        profile = cursor.fetchone()[0]
-
-        # Decodificar la imagen
-        imagen_bytes = post[3]
+    # Decodificar la imagen
+    if userinfo['foto_perfil']:
+        imagen_bytes = userinfo['foto_perfil']
         imagen_decoded = imagen_bytes.decode('utf-8') if imagen_bytes else None
-
-        # Formatear la publicación
-        publicacion_formateada = {
-            'nombre_usuario': username,
-            'nombre_usuario': profile,
-            'fecha_depublicacion': post[2].strftime("%Y-%m-%d %H:%M:%S"),
-            'descripcion': post[4],
-            'imagen': imagen_decoded
-        }
-
-        # Agregar la publicación formateada a la lista
-        postsformatted.append(publicacion_formateada)
+        userinfo['foto_perfil'] = imagen_decoded
 
     # Cerrar el cursor y la conexión
     cursor.close()
     newConnection.close()
 
-    return jsonify(postsformatted)
+    if userinfo:
+        return jsonify({'user': userinfo}), 200
+    else:
+        return jsonify({'mensaje': 'Usuario no encontrado'}), 404
+    
+@app.route('/edit_user', methods=['POST'])
+def edit_user():
+    # Obtener datos del formulario de editar
+    # firstname = request.form.get('firstname')
+    # lastname = request.form.get('lastname')
+    username = request.form.get('username')
+    username =  username.lower().strip()
+    # mail = request.form.get('mail')
+    password = request.form.get('password')
+    password = password.encode('utf-8')
+    sal = bcrypt.gensalt()
+    hashedpassword = bcrypt.hashpw(password, sal)
+    # year = request.form.get('year')
+    # month = request.form.get('month')
+    # day = request.form.get('day')
+    profile = request.files.get('profile')
+    biography = request.form.get('biography')
+    sex = request.form.get('sex')
+    
+    # Conectar a la base de datos
+    newConnection = db.connect_and_execute(["SELECT * FROM usuarios"])
+
+    # Crear un cursor para ejecutar consultas
+    cursor = newConnection.cursor(dictionary=True)
+
+    # Verificar si el nuevo nombre de usuario ya existe
+    if username:
+        cursor.execute("SELECT * FROM usuarios WHERE username = %s", (username,))
+        if cursor.fetchone():
+            cursor.close()
+            newConnection.close()
+            return jsonify({'mensaje': 'El nombre de usuario ya está en uso'}), 400
+    else:
+        username = session['user']['username']
+    
+    # Verificar si se proporcionó una nueva contraseña
+    if password:
+        hashedpassword = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
+    else:
+        hashedpassword = session['user']['password']
+    
+    # Verificar si se proporcionó una nueva foto de perfil
+    if profile:
+        # Cargar la imagen y comprimirla
+        with Image.open(profile) as img:
+            # Reducir el tamaño y guardar en un nuevo objeto BytesIO
+            img = img.resize((300, 300))
+            img = img.convert('RGB')
+            output = io.BytesIO()
+            img.save(output, format='JPEG', quality=60)
+
+        # Convertir a Base64
+        profilebytes = base64.b64encode(output.getvalue()).decode('utf-8')
+    else:
+        profilebytes = session['user']['profile']
+
+    # Verificar si se proporcionó una biografia
+    if biography == None:
+        biography = session['user']['biography']
+
+    # Verificar si se proporcionó un sexo
+    if sex == None:
+        sex = session['user']['sex']
+
+    # Actualizar la información del usuario
+    cursor.execute(
+        "UPDATE usuarios SET username = %s, nombre = %s, apellido = %s, correo_electronico = %s, contrasena_hash = %s, foto_perfil = %s, biografia = %s, sexo = %s WHERE id_usuario = %s",
+        (username, session['user']['firstName'], session['user']['lastName'], session['user']['mail'], hashedpassword, profilebytes, biography, sex, session['user']['iduser'])
+    )
+
+    # Confirmar la transacción
+    newConnection.commit()
+
+    # Actualizar la información en la sesión
+    session['user']['username'] = username if username else session['user']['username']
+    session['user']['profile'] = profilebytes if profilebytes else session['user']['profile']
+    session['user']['biography'] = biography if biography else session['user']['biography']
+    session['user']['sex'] = sex if sex else session['user']['sex']
+
+    # Cerrar el cursor y la conexión
+    cursor.close()
+    newConnection.close()
+
+    return jsonify({'mensaje': 'Perfil actualizado con éxito', 'user': session['user']}), 200
 
 # Ruta para crear publicaciones
 @app.route('/create_post', methods=['POST'])
@@ -301,15 +391,15 @@ def create_post():
         return jsonify({'mensaje': 'El texto debe tener menos de 150 caracteres'}), 400
 
     # Asumiendo que la imagen es opcional y solo se almacena si se proporciona
-    imagebytes = None
     if image:
         if image:
             # Cargar la imagen y comprimirla
             with Image.open(image) as img:
                 # Reducir el tamaño y guardar en un nuevo objeto BytesIO
-                img = img.resize((800, 800))
+                # img = img.resize((800, 800))
+                img = img.convert('RGB')
                 output = io.BytesIO()
-                img.save(output, format='JPEG', quality=70)
+                img.save(output, format='JPEG', quality=60)
 
         # Convertir a Base64
         imagebytes = base64.b64encode(output.getvalue()).decode('utf-8')
@@ -323,7 +413,7 @@ def create_post():
     # Ejecutar el INSERT INTO en la tabla de publicaciones
     cursor.execute(
          "INSERT INTO publicaciones (id_publicacion, id_usuario, contenido_publicacion, fecha_depublicacion, imagen, reaccion) VALUES (%s, %s, %s, %s, %s, %s)",
-        (idpost, iduser, text, f"{datetime.today().year}-{datetime.today().month}-{datetime.today().day}", imagebytes, 0)
+        (idpost, iduser, text, postdate, imagebytes, 0)
     )
 
     # Confirmar la transacción
@@ -347,29 +437,233 @@ def create_post():
     return response
 
 #Ruta para crear comentarios
+@app.route('/likes', methods=['POST'])
+def likes():
+    # Obtener datos del formulario de la creacion de publicacion
+    idlikes = ''.join([str(random.randint(0, 9)) for _ in range(9)])
+    iduser = session['user']['iduser']
+    idpost = request.form.get('id_post')  # Este sería el identificador de la publicación respectivo
+    status = 0
+
+    # Conectar a la base de datos
+    newConnection = db.connect_and_execute(["SELECT * FROM likes"])
+
+    # Crear un cursor para ejecutar consultas
+    cursor = newConnection.cursor(buffered=True)
+
+    # Obtener el estado de likes
+    cursor.execute("SELECT estado FROM likes WHERE id_publicacion = %s", (idpost,))
+    laststatus = cursor.fetchone()
+
+    # Obtener el contador de reacciones de la publicacion
+    cursor.execute("SELECT reaccion FROM publicaciones WHERE id_publicacion = %s", (idpost,))
+    reaccion = cursor.fetchone()
+    reaccion = int(''.join(map(str, reaccion)))
+
+    # Activar o desactivar el like segun el estado
+    if (laststatus == None or int(''.join(map(str, laststatus))) == 0):
+        status = 1
+        reaccion+=1
+    else:
+        status = 0
+        reaccion-=1
+
+    if (laststatus == None):
+        # Ejecutar el INSERT INTO en la tabla de likes
+        cursor.execute("INSERT INTO likes (id_likes, id_usuario, id_publicacion, estado) VALUES (%s, %s, %s, %s)",
+        (idlikes, iduser, idpost, status))
+    else:
+        cursor.execute("UPDATE likes SET estado = %s WHERE id_publicacion = %s", 
+        (status, idpost))
+    
+    cursor.execute("UPDATE publicaciones SET reaccion = %s WHERE id_publicacion = %s",
+    (reaccion, idpost))
+
+    # Confirmar la transacción
+    newConnection.commit()
+
+    # Cerrar el cursor y la conexión
+    cursor.close()
+    newConnection.close()
+
+    # Por ahora, simplemente retornamos los datos proporcionados
+    likeinfo = {
+        'idlike': idlikes,
+        'iduser': iduser,
+        'idpost': idpost,
+        'likestatus': status
+    }
+
+    response = jsonify({'mensaje': '¡Like cambiado con éxito!', 'comentario': likeinfo})
+    return response
+
+#Ruta para crear comentarios
 @app.route('/create_comment', methods=['POST'])
 def create_comment():
-    idcomment = secrets.token_hex(4)
-    username = request.form.get('username')
-    text = request.form.get('text')
+    # Obtener datos del formulario de la creacion de publicacion
+    idcomment = ''.join([str(random.randint(0, 9)) for _ in range(9)])
+    iduser = session['user']['iduser']
     idpost = request.form.get('id_post')  # Este sería el identificador de la publicación respectivo
+    commentdate = f"{datetime.today().year}-{datetime.today().month}-{datetime.today().day}"
+    text = request.form.get('text')
 
     # Verifica que el texto del comentario tenga menos de 100 caracteres
     if len(text) > 100:
         return jsonify({'mensaje': 'El comentario debe tener menos de 100 caracteres'}), 400
 
-    # Almacenar el comentario en la base de datos y asociarlo a la publicación y al usuario
+    # Conectar a la base de datos
+    newConnection = db.connect_and_execute(["SELECT * FROM comentarios"])
 
-    # Por ahora, simplemente retornamos los datos proporcionados
+    # Crear un cursor para ejecutar consultas
+    cursor = newConnection.cursor()
+
+    # Ejecutar el INSERT INTO en la tabla de comentarios
+    cursor.execute(
+        "INSERT INTO comentarios (id_comentario, id_usuario, id_publicacion, contenidocomentario, fecha_depublicacioncomentario) VALUES (%s, %s, %s, %s, %s)",
+        (idcomment, iduser, idpost, text, commentdate)
+    )
+
+    # Confirmar la transacción
+    newConnection.commit()
+
+    # Cerrar el cursor y la conexión
+    cursor.close()
+    newConnection.close()
+
+    # Retornar los datos proporcionados
     commentinfo = {
-        'idComentario': idcomment,
-        'usuario': username,
-        'texto': text,
-        'idPublicacion': idpost
+        'idcomment': idcomment,
+        'iduser': iduser,
+        'idpost': idpost,
+        'datecomment': commentdate,
+        'text': text
     }
 
     response = jsonify({'mensaje': '¡Comentario creado con éxito!', 'comentario': commentinfo})
     return response
+
+@app.route('/get_posts', methods=['GET'])
+def get_posts():
+    offset = request.args.get('offset', 0, type=int)  # Obtiene el offset de la consulta
+    
+    # Conectar a la base de datos
+    newConnection = db.connect_and_execute(["SELECT * FROM publicaciones"])
+    cursor = newConnection.cursor()
+
+    # Obtener todas las publicaciones
+    cursor.execute("SELECT * FROM publicaciones ORDER BY fecha_depublicacion DESC LIMIT 10 OFFSET %d", (offset))
+    posts = cursor.fetchall()
+
+    # Lista para almacenar las publicaciones formateadas
+    postsformatted = []
+
+    for post in posts:
+        # Obtener el nombre del usuario
+        cursor.execute("SELECT username FROM usuarios WHERE id_usuario = %s", (post[1],))
+        username = cursor.fetchone()[0]
+
+        # Obtener la foto de perfil del usuario
+        cursor.execute("SELECT username FROM usuarios WHERE foto_perfil = %s", (post[1],))
+        profile = cursor.fetchone()[0]
+
+        # Decodificar la imagen
+        if post[3]:
+            imagen_bytes = post[3]
+            imagen_decoded = imagen_bytes.decode('utf-8') if imagen_bytes else None
+
+        # Formatear la publicación
+        publicacion_formateada = {
+            'nombre_usuario': username,
+            'nombre_usuario': profile,
+            'descripcion': post[2],
+            'fecha_depublicacion': post[3].strftime("%Y-%m-%d %H:%M:%S"),
+            'imagen': imagen_decoded,
+            'reaccion': post[5]
+        }
+
+        # Agregar la publicación formateada a la lista
+        postsformatted.append(publicacion_formateada)
+
+    # Cerrar el cursor y la conexión
+    cursor.close()
+    newConnection.close()
+
+    return jsonify(postsformatted)
+
+@app.route('/post/<int:id_publicacion>', methods=['GET'])
+def view_post(id_publicacion):
+    # Conectar a la base de datos
+    newConnection = db.connect_and_execute(["SELECT * FROM publicaciones"])
+
+    # Crear un cursor para ejecutar consultas
+    cursor = newConnection.cursor(dictionary=True)
+
+    # Buscar el post por su ID
+    cursor.execute("SELECT * FROM publicaciones WHERE id_publicacion = %s", (id_publicacion,))
+    post = cursor.fetchone()
+
+    # Decodificar la imagen
+    if post['imagen']:
+        imagen_bytes = post['imagen']
+        imagen_decoded = imagen_bytes.decode('utf-8') if imagen_bytes else None
+        post['imagen'] = imagen_decoded
+
+    # Cerrar el cursor y la conexión
+    cursor.close()
+    newConnection.close()
+
+    if post:
+        return jsonify({'post': post}), 200
+    else:
+        return jsonify({'mensaje': 'Publicación no encontrada'}), 404
+    
+@app.route('/add_friend', methods=['GET'])
+def add_friend():
+    # Obtener datos del formulario de la adicion de amigos
+    idfriendship = ''.join([str(random.randint(0, 9)) for _ in range(9)])
+    iduser = session['user']['iduser']
+    iduserfriend = request.form.get('id_usuario_amigo')
+    
+    # Conectar a la base de datos
+    newConnection = db.connect_and_execute(["SELECT * FROM amistades"])
+
+    # Crear un cursor para ejecutar consultas
+    cursor = newConnection.cursor(buffered=True, dictionary=True)
+
+    # Verificar que el amigo existe
+    cursor.execute("SELECT * FROM usuarios WHERE id_usuario = %s", (iduserfriend,))
+    friend = cursor.fetchone()
+    if not friend:
+        # Cerrar el cursor y la conexión
+        cursor.close()
+        newConnection.close()
+        return jsonify({'mensaje': 'El usuario no existe'}), 404
+    
+    # Verificar que el usuario no esté intentando agregarse a sí mismo como amigo
+    if friend == iduser:
+        return jsonify({'mensaje': 'No puedes agregarte a ti mismo como amigo'}), 400
+    
+    # Verificar que no exista ya una amistad entre ellos
+    cursor.execute("SELECT * FROM amistades WHERE (id_usuarioa = %s AND id_usuarioa = %s) OR (id_usuarioa = %s AND id_usuariob = %s)", (iduser, iduserfriend, iduserfriend, iduser))
+    friendLiked = cursor.fetchone()
+    if friendLiked:
+        # Cerrar el cursor y la conexión
+        cursor.close()
+        newConnection.close()
+        return jsonify({'mensaje': 'Ya están enlazados como amigos'}), 400
+
+    # Ejecutar el INSERT INTO en la tabla de amistades
+    cursor.execute(
+        "INSERT INTO amistades (id_amistad, id_usuarioa, id_usuariob) VALUES (%s, %s, %s)",
+        (idfriendship, iduser, iduserfriend)
+    )
+
+    # Confirmar la transacción
+    newConnection.commit()
+
+    # Cerrar el cursor y la conexión
+    cursor.close()
+    newConnection.close()
 
 if __name__ == '__main__':
     app.run(port=8000)

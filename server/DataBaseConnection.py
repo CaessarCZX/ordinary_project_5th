@@ -62,7 +62,8 @@ class DB:
                 id_usuario INT,
                 FOREIGN KEY(id_usuario) REFERENCES usuarios(id_usuario) ON UPDATE CASCADE ON DELETE CASCADE,
                 id_publicacion INT,
-                FOREIGN KEY(id_publicacion) REFERENCES publicaciones(id_publicacion) ON UPDATE CASCADE ON DELETE CASCADE
+                FOREIGN KEY(id_publicacion) REFERENCES publicaciones(id_publicacion) ON UPDATE CASCADE ON DELETE CASCADE,
+                estado INT
             )
             """,
             """
