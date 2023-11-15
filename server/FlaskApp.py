@@ -8,12 +8,16 @@ import base64
 from datetime import datetime, timedelta
 from PIL import Image
 from DataBaseConnection import DB
+from Mails import send_mail
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = secrets.token_hex(32)
 
 # Crear una instancia de la clase DB para verificar y crear la base de datos y las tablas
 db = DB()
+
+# Lista de usuarios y sus contraseñas (esto debería ser una base de datos en un entorno real)
+failed_attempts = 0
 
 #Modelo del usuario
 class User:
@@ -59,22 +63,22 @@ def registro():
     #Ejemplo de registro: http://127.0.0.1:8000/register?firstname=Samuel Antonio&lastname=Cayetano Pérez&username=Darstick&mail=sami_cayetano@hotmail.com&password=1234567&year=2003&month=10&day=10
     
     # Obtener datos del formulario de registro
-    iduser = ''.join([str(random.randint(0, 9)) for _ in range(9)])
-    firstname = request.form.get('firstname')
-    lastname = request.form.get('lastname')
+    id_user = ''.join([str(random.randint(0, 9)) for _ in range(9)])
+    first_name = request.form.get('firstname')
+    last_name = request.form.get('lastname')
     username = request.form.get('username')
     username =  username.lower().strip()
     mail = request.form.get('mail')
     password = request.form.get('password')
     password = password.encode('utf-8')
     sal = bcrypt.gensalt()
-    hashedpassword = bcrypt.hashpw(password, sal)
+    hashed_password = bcrypt.hashpw(password, sal)
     year = request.form.get('year')
     month = request.form.get('month')
     day = request.form.get('day')
 
     # Crear instancia de Usuario
-    newUser = User(iduser, firstname, lastname, username, mail, password, year, month, day, None, None, None)
+    newUser = User(id_user, first_name, last_name, username, mail, password, year, month, day, None, None, None)
 
     # Conectar a la base de datos
     newConnection = db.connect_and_execute(["SELECT * FROM usuarios"])
@@ -114,7 +118,7 @@ def registro():
     # Ejecutar el INSERT INTO en la tabla de usuarios
     cursor.execute(
         "INSERT INTO usuarios (id_usuario, username, nombre, apellido, correo_electronico, contrasena_hash, fecha_nacimiento, foto_perfil, biografia, sexo) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
-        (iduser, username, firstname, lastname, mail, hashedpassword, f"{year}-{month}-{day}", ' ', ' ', ' ')
+        (id_user, username, first_name, last_name, mail, hashed_password, f"{year}-{month}-{day}", ' ', ' ', ' ')
     )
 
     # Confirmar la transacción
@@ -126,9 +130,9 @@ def registro():
 
     # Almacenar los datos en sesión
     userinfo = {
-        'iduser': iduser,
-        'firstname': firstname,
-        'lastname': lastname, 
+        'iduser': id_user,
+        'firstname': first_name,
+        'lastname': last_name, 
         'username': username, 
         'mail': mail,
         'password': ' ',
@@ -141,7 +145,7 @@ def registro():
     }
     session['user'] = userinfo
     payload = {
-        'user_id': iduser,
+        'user_id': id_user,
         'exp': datetime.utcnow() + timedelta(hours=1)  # El token expira en 1 hora
     }
     token = jwt.encode(payload, 'SECRET_KEY', algorithm='HS256')
@@ -204,7 +208,21 @@ def login():
     # Si las credenciales no son válidas
     cursor.close()
     newConnection.close()
-    return jsonify({'mensaje': 'Credenciales incorrectas'}), 401
+    global failed_attempts  # Declarar la variable como global
+    failed_attempts += 1
+
+    if failed_attempts >= 2:
+        send_mail(mail)
+        # Bloquear el Token por 1 hora
+        payload = {
+            'exp': datetime.utcnow() + timedelta(minutes=1)  # El token expira en 1 minuto
+        }
+        blocked_token = jwt.encode(payload, app.config['SECRET_KEY'], algorithm='HS256')
+        response = jsonify({'error': 'Demasiados intentos fallidos. El token ha sido bloqueado por un tiempo.', 'blocked_token': blocked_token})
+        response.set_cookie('blocked_token', blocked_token)
+        return response
+    else:
+        return jsonify({'error': 'Credenciales incorrectas. Intento fallido'}), 401
 
 # Ruta para mantener la sesión activa
 @app.route('/keep_session', methods=['GET'])
@@ -261,7 +279,7 @@ def get_user_session():
     else:
         return jsonify({'mensaje': 'Usuario no autenticado'}), 401
     
-@app.route('/user/<int:id_usuario>', methods=['GET'])
+@app.route('/user/<int:id_user>', methods=['GET'])
 def view_user(id_user):
     # Conectar a la base de datos
     newConnection = db.connect_and_execute(["SELECT * FROM usuario"])
@@ -270,7 +288,7 @@ def view_user(id_user):
     cursor = newConnection.cursor(dictionary=True)
 
     # Buscar el usuario por su ID
-    cursor.execute("SELECT * FROM usuario WHERE id_usuario = %s", (id_user,))
+    cursor.execute("SELECT * FROM usuarios WHERE id_usuario = %s", (id_user,))
     userinfo = cursor.fetchone()
 
     #Oculta contraseña
