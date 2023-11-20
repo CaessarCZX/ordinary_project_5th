@@ -1,7 +1,9 @@
 from flask import Flask, request, jsonify, session
+from flask_cors import CORS, cross_origin
 import io
 import jwt
 import secrets
+import re
 import random
 import bcrypt
 import base64
@@ -12,6 +14,7 @@ from Mails import send_mail
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = secrets.token_hex(32)
+cors = CORS(app, supports_credentials=True)
 
 # Crear una instancia de la clase DB para verificar y crear la base de datos y las tablas
 db = DB()
@@ -59,6 +62,7 @@ class User:
 
 # Ruta de registro
 @app.route('/register', methods=['POST'])
+@cross_origin()
 def registro():
     #Ejemplo de registro: http://127.0.0.1:8000/register?firstname=Samuel Antonio&lastname=Cayetano Pérez&username=Darstick&mail=sami_cayetano@hotmail.com&password=1234567&year=2003&month=10&day=10
     
@@ -76,6 +80,14 @@ def registro():
     year = request.form.get('year')
     month = request.form.get('month')
     day = request.form.get('day')
+
+    # Validar nombre y apellido
+    if not re.match("^[A-Za-z]+$", first_name) or not re.match("^[A-Za-z]+$", last_name):
+        return jsonify({'error': 'El nombre y apellido no deben contener números o símbolos'}), 400
+
+    # Validar correo electrónico
+    if not re.match("[^@]+@[^@]+\.[^@]+", mail):
+        return jsonify({'error': 'El correo electrónico debe tener un formato válido'}), 400
 
     # Crear instancia de Usuario
     newUser = User(id_user, first_name, last_name, username, mail, password, year, month, day, None, None, None)
@@ -154,6 +166,7 @@ def registro():
 
 # Ruta de login
 @app.route('/login', methods=['POST'])
+@cross_origin()
 def login():
     # Obtener datos del formulario de login
     mail = request.form.get('mail')
@@ -211,7 +224,7 @@ def login():
     global failed_attempts  # Declarar la variable como global
     failed_attempts += 1
 
-    if failed_attempts >= 2:
+    if failed_attempts >= 3:
         send_mail(mail)
         # Bloquear el Token por 1 hora
         payload = {
@@ -226,6 +239,7 @@ def login():
 
 # Ruta para mantener la sesión activa
 @app.route('/keep_session', methods=['GET'])
+@cross_origin()
 def keep_session():
     token = request.cookies.get('token')
 
@@ -233,18 +247,17 @@ def keep_session():
         try:
             # Decodifica el token
             payload = jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
-            print(payload)
-            userToken = payload['userToken']
+            userToken = payload['user_id']
 
             # Genera un nuevo token y actualiza la cookie
-            newtoken = jwt.encode({'userToken': userToken, 'exp': datetime.utcnow() + timedelta(hours=1)}, app.config['SECRET_KEY'], algorithm='HS256')
+            newtoken = jwt.encode({'user': userToken, 'exp': datetime.utcnow() + timedelta(hours=1)}, app.config['SECRET_KEY'], algorithm='HS256')
             response = jsonify({'mensaje': '¡Sesión actualizada!', 'token': newtoken})
             response.set_cookie('token', newtoken)
 
             # También puedes devolver información del usuario si lo necesitas
-            userinfo = session.get('user')
-            if userinfo:
-                response['user'] = userinfo
+            # userinfo = session.get('user')
+            # if userinfo:
+                #response['user'] = userinfo
 
             return response
 
@@ -264,6 +277,7 @@ def logout():
     return response
 
 @app.route('/get_user_session', methods=['GET'])
+@cross_origin()
 def get_user_session():
     userinfo = session.get('user')
 
@@ -280,6 +294,7 @@ def get_user_session():
         return jsonify({'mensaje': 'Usuario no autenticado'}), 401
     
 @app.route('/user/<int:id_user>', methods=['GET'])
+@cross_origin()
 def view_user(id_user):
     # Conectar a la base de datos
     newConnection = db.connect_and_execute(["SELECT * FROM usuario"])
@@ -569,11 +584,11 @@ def get_posts():
     cursor = newConnection.cursor()
 
     # Obtener todas las publicaciones
-    cursor.execute("SELECT * FROM publicaciones ORDER BY fecha_depublicacion DESC LIMIT 10 OFFSET %d", (offset))
+    cursor.execute("SELECT * FROM publicaciones ORDER BY fecha_depublicacion DESC LIMIT 10 OFFSET %s", (offset,))
     posts = cursor.fetchall()
 
     # Lista para almacenar las publicaciones formateadas
-    postsformatted = []
+    postsFormatted = []
 
     for post in posts:
         # Obtener el nombre del usuario
@@ -581,32 +596,35 @@ def get_posts():
         username = cursor.fetchone()[0]
 
         # Obtener la foto de perfil del usuario
-        cursor.execute("SELECT username FROM usuarios WHERE foto_perfil = %s", (post[1],))
+        cursor.execute("SELECT foto_perfil FROM usuarios WHERE id_usuario = %s", (post[1],))
         profile = cursor.fetchone()[0]
+        if profile:
+            profile_bytes = profile
+            profile_decoded =  profile_bytes.decode('utf-8') if profile_bytes else None
 
         # Decodificar la imagen
-        if post[3]:
-            imagen_bytes = post[3]
-            imagen_decoded = imagen_bytes.decode('utf-8') if imagen_bytes else None
+        if post[4]:
+            image_bytes = post[4]
+            image_decoded = image_bytes.decode('utf-8') if image_bytes else None
 
         # Formatear la publicación
         publicacion_formateada = {
-            'nombre_usuario': username,
-            'nombre_usuario': profile,
-            'descripcion': post[2],
-            'fecha_depublicacion': post[3].strftime("%Y-%m-%d %H:%M:%S"),
-            'imagen': imagen_decoded,
-            'reaccion': post[5]
+            'username': username,
+            'profile': profile_decoded,
+            'text': post[2],
+            'datepost': post[3].strftime("%Y-%m-%d %H:%M:%S"),
+            'image': image_decoded,
+            'reactions': post[5]
         }
 
         # Agregar la publicación formateada a la lista
-        postsformatted.append(publicacion_formateada)
+        postsFormatted.append(publicacion_formateada)
 
     # Cerrar el cursor y la conexión
     cursor.close()
     newConnection.close()
 
-    return jsonify(postsformatted)
+    return jsonify(postsFormatted)
 
 @app.route('/post/<int:id_publicacion>', methods=['GET'])
 def view_post(id_publicacion):
@@ -635,12 +653,56 @@ def view_post(id_publicacion):
     else:
         return jsonify({'mensaje': 'Publicación no encontrada'}), 404
     
-@app.route('/add_friend', methods=['GET'])
+@app.route('/get_comments', methods=['GET'])
+def get_comments():
+    offset = request.args.get('offset', 0, type=int)  # Obtiene el offset de la consulta
+    
+    # Conectar a la base de datos
+    newConnection = db.connect_and_execute(["SELECT * FROM comentarios"])
+    cursor = newConnection.cursor()
+
+    # Obtener todas los comentarios
+    cursor.execute("SELECT * FROM comentarios ORDER BY fecha_depublicacioncomentario DESC LIMIT 10 OFFSET %s", (offset,))
+    comments = cursor.fetchall()
+
+    # Lista para almacenar las comentarios formateadas
+    commentsFormatted = []
+
+    for comment in comments:
+        # Obtener el nombre del usuario
+        cursor.execute("SELECT username FROM usuarios WHERE id_usuario = %s", (comment[1],))
+        username = cursor.fetchone()[0]
+
+        # Obtener la foto de perfil del usuario
+        cursor.execute("SELECT foto_perfil FROM usuarios WHERE id_usuario = %s", (comment[1],))
+        profile = cursor.fetchone()[0]
+        if profile:
+            profile_bytes = profile
+            profile_decoded =  profile_bytes.decode('utf-8') if profile_bytes else None
+        
+        # Formatear la publicación
+        publicacion_formateada = {
+            'username': username,
+            'profile': profile_decoded,
+            'text': comment[3],
+            'datepost': comment[4].strftime("%Y-%m-%d %H:%M:%S"),
+        }
+
+        # Agregar la publicación formateada a la lista
+        commentsFormatted.append(publicacion_formateada)
+
+    # Cerrar el cursor y la conexión
+    cursor.close()
+    newConnection.close()
+
+    return jsonify(commentsFormatted)
+    
+@app.route('/add_friend', methods=['POST'])
 def add_friend():
     # Obtener datos del formulario de la adicion de amigos
-    idfriendship = ''.join([str(random.randint(0, 9)) for _ in range(9)])
-    iduser = session['user']['iduser']
-    iduserfriend = request.form.get('id_usuario_amigo')
+    id_friendship = ''.join([str(random.randint(0, 9)) for _ in range(9)])
+    id_user = session['user']['iduser']
+    id_user_friend = request.form.get('id_user_friend')
     
     # Conectar a la base de datos
     newConnection = db.connect_and_execute(["SELECT * FROM amistades"])
@@ -649,7 +711,7 @@ def add_friend():
     cursor = newConnection.cursor(buffered=True, dictionary=True)
 
     # Verificar que el amigo existe
-    cursor.execute("SELECT * FROM usuarios WHERE id_usuario = %s", (iduserfriend,))
+    cursor.execute("SELECT * FROM usuarios WHERE id_usuario = %s", (id_user_friend,))
     friend = cursor.fetchone()
     if not friend:
         # Cerrar el cursor y la conexión
@@ -658,11 +720,11 @@ def add_friend():
         return jsonify({'mensaje': 'El usuario no existe'}), 404
     
     # Verificar que el usuario no esté intentando agregarse a sí mismo como amigo
-    if friend == iduser:
+    if friend == id_user:
         return jsonify({'mensaje': 'No puedes agregarte a ti mismo como amigo'}), 400
     
     # Verificar que no exista ya una amistad entre ellos
-    cursor.execute("SELECT * FROM amistades WHERE (id_usuarioa = %s AND id_usuarioa = %s) OR (id_usuarioa = %s AND id_usuariob = %s)", (iduser, iduserfriend, iduserfriend, iduser))
+    cursor.execute("SELECT * FROM amistades WHERE (id_usuarioa = %s AND id_usuarioa = %s) OR (id_usuarioa = %s AND id_usuariob = %s)", (id_user, id_user_friend, id_user_friend, id_user))
     friendLiked = cursor.fetchone()
     if friendLiked:
         # Cerrar el cursor y la conexión
@@ -673,7 +735,7 @@ def add_friend():
     # Ejecutar el INSERT INTO en la tabla de amistades
     cursor.execute(
         "INSERT INTO amistades (id_amistad, id_usuarioa, id_usuariob) VALUES (%s, %s, %s)",
-        (idfriendship, iduser, iduserfriend)
+        (id_friendship, id_user, id_user_friend)
     )
 
     # Confirmar la transacción
@@ -682,6 +744,9 @@ def add_friend():
     # Cerrar el cursor y la conexión
     cursor.close()
     newConnection.close()
+
+    response = jsonify({'mensaje': '¡Amigo creado con éxito!', 'usuario a': id_user, 'usuario b': id_user_friend})
+    return response
 
 if __name__ == '__main__':
     app.run(port=8000)
