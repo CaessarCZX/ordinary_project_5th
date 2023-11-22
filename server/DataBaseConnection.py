@@ -6,8 +6,8 @@ class DB:
         self.__user = 'root'
         # self.__password = 'arieljavier' #Contraseña de Gibran
         self.__db = 'db_proyectofinal'
-        # self.__password = '10102003' #Contraseña de Samuel
-        self.__password = '1234' #Contraseña de Cesar
+        self.__password = '10102003' #Contraseña de Samuel
+        # self.__password = '1234' #Contraseña de Cesar
         self.__port = '3306'
 
         # Conectar a la base de datos o crearla si no existe
@@ -41,7 +41,8 @@ class DB:
                 correo_electronico VARCHAR(80) UNIQUE,
                 contrasena_hash VARCHAR(128),
                 fecha_nacimiento DATE,
-                foto_perfil BLOB,
+                foto_perfil VARCHAR(255),
+                telefono VARCHAR(10),
                 biografia TEXT,
                 sexo VARCHAR(30)
             )
@@ -53,7 +54,7 @@ class DB:
                 FOREIGN KEY(id_usuario) REFERENCES usuarios(id_usuario) ON UPDATE CASCADE ON DELETE CASCADE,
                 contenido_publicacion TEXT,
                 fecha_depublicacion DATETIME DEFAULT CURRENT_TIMESTAMP,
-                imagen BLOB,
+                imagen VARCHAR(255),
                 reaccion INT
             )
             """,
