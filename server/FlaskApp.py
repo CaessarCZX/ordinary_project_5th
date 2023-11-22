@@ -61,8 +61,7 @@ class User:
             self.networksocials.remove(networksocial)
 
 # Ruta de registro
-@app.route('api/register', methods=['POST'])
-@cross_origin()
+@app.route('/api/register', methods=['POST'])
 def registro():
     #Ejemplo de registro: http://127.0.0.1:8000/register?firstname=Samuel Antonio&lastname=Cayetano Pérez&username=Darstick&mail=sami_cayetano@hotmail.com&password=1234567&year=2003&month=10&day=10
     
@@ -165,7 +164,7 @@ def registro():
     return response
 
 # Ruta de login
-@app.route('api/login', methods=['POST'])
+@app.route('/api/login', methods=['POST'])
 @cross_origin()
 def login():
     # Obtener datos del formulario de login
@@ -238,7 +237,7 @@ def login():
         return jsonify({'error': 'Credenciales incorrectas. Intento fallido'}), 401
 
 # Ruta para mantener la sesión activa
-@app.route('api/keep_session', methods=['GET'])
+@app.route('/api/keep_session', methods=['GET'])
 @cross_origin()
 def keep_session():
     token = request.cookies.get('token')
@@ -269,16 +268,16 @@ def keep_session():
     return jsonify({'mensaje': 'Token no proporcionado'}), 401
 
 # Ruta para cerrar sesión
-@app.route('api/logout', methods=['GET'])
+@app.route('/api/logout', methods=['GET'])
 def logout():
     session.pop('user', None)
     response = jsonify({'mensaje': '¡Sesión cerrada exitosamente!'})
     response.delete_cookie('token')
     return response
 
-@app.route('/get_user_session', methods=['GET'])
+@app.route('/profile', methods=['GET'])
 @cross_origin()
-def get_user_session():
+def profile():
     userinfo = session.get('user')
 
     if userinfo:

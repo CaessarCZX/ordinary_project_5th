@@ -7,6 +7,7 @@ class DB:
         # self.__password = 'arieljavier' #Contraseña de Gibran
         self.__db = 'db_proyectofinal'
         self.__password = '10102003' #Contraseña de Samuel
+        # self.__password = '1234' #Contraseña de Cesar
         self.__port = '3306'
 
         # Conectar a la base de datos o crearla si no existe
