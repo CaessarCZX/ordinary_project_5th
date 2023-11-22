@@ -62,7 +62,6 @@ class User:
 
 # Ruta de registro
 @app.route('/api/register', methods=['POST'])
-@cross_origin
 def registro():
     #Ejemplo de registro: http://127.0.0.1:8000/register?firstname=Samuel Antonio&lastname=Cayetano Pérez&username=Darstick&mail=sami_cayetano@hotmail.com&password=1234567&year=2003&month=10&day=10
     
@@ -72,7 +71,7 @@ def registro():
     first_name = data.get('firstname')
     last_name = data.get('lastname')
     username = data.get('username')
-    username =  data.lower().strip()
+    username =  username.lower().strip()
     mail = data.get('email')
     password = data.get('password')
     password = password.encode('utf-8')
@@ -134,7 +133,7 @@ def registro():
     # Ejecutar el INSERT INTO en la tabla de usuarios
     cursor.execute(
         "INSERT INTO usuarios (id_usuario, username, nombre, apellido, correo_electronico, contrasena_hash, fecha_nacimiento, foto_perfil, biografia, sexo) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
-        (id_user, username, first_name, last_name, mail, hashed_password, f"{year}-{month}-{day}", ' ', ' ', ' ')
+        (id_user, username, first_name, last_name, mail, hashed_password, None, ' ', ' ', ' ')
     )
 
     # Confirmar la transacción
