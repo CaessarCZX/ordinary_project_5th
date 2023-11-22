@@ -62,6 +62,7 @@ class User:
 
 # Ruta de registro
 @app.route('/api/register', methods=['POST'])
+@cross_origin
 def registro():
     #Ejemplo de registro: http://127.0.0.1:8000/register?firstname=Samuel Antonio&lastname=Cayetano Pérez&username=Darstick&mail=sami_cayetano@hotmail.com&password=1234567&year=2003&month=10&day=10
     
