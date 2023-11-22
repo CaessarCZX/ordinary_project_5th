@@ -66,20 +66,24 @@ class User:
 def registro():
     #Ejemplo de registro: http://127.0.0.1:8000/register?firstname=Samuel Antonio&lastname=Cayetano Pérez&username=Darstick&mail=sami_cayetano@hotmail.com&password=1234567&year=2003&month=10&day=10
     
+    data = request.json
     # Obtener datos del formulario de registro
     id_user = ''.join([str(random.randint(0, 9)) for _ in range(9)])
-    first_name = request.form.get('firstname')
-    last_name = request.form.get('lastname')
-    username = request.form.get('username')
-    username =  username.lower().strip()
-    mail = request.form.get('mail')
-    password = request.form.get('password')
+    first_name = data.get('firstname')
+    last_name = data.get('lastname')
+    username = data.get('username')
+    username =  data.lower().strip()
+    mail = data.get('email')
+    password = data.get('password')
     password = password.encode('utf-8')
     sal = bcrypt.gensalt()
     hashed_password = bcrypt.hashpw(password, sal)
-    year = request.form.get('year')
-    month = request.form.get('month')
-    day = request.form.get('day')
+    #year = data.get('year')
+    #month = data.get('month')
+    #day = data.get('day')
+    year = ""
+    month = ""
+    day = ""
 
     # Validar nombre y apellido
     if not re.match("^[A-Za-z]+$", first_name) or not re.match("^[A-Za-z]+$", last_name):
@@ -119,13 +123,13 @@ def registro():
         return jsonify({'mensaje': 'La contraseña debe tener al menos 8 caracteres'}), 400
 
     # Verificar que el usuario sea mayor de 15 años
-    today = datetime.today()
+    #today = datetime.today()
         
-    edad = today.year - int(year) - ((today.month, today.day) < (int(month), int(day)))
-    if edad < 15:
-        cursor.close()
-        newConnection.close()
-        return jsonify({'mensaje': 'Debes tener al menos 15 años para registrarte'}), 400
+    #edad = today.year - int(year) - ((today.month, today.day) < (int(month), int(day)))
+    #if edad < 15:
+        #cursor.close()
+        #newConnection.close()
+        #return jsonify({'mensaje': 'Debes tener al menos 15 años para registrarte'}), 400
 
     # Ejecutar el INSERT INTO en la tabla de usuarios
     cursor.execute(
@@ -168,9 +172,10 @@ def registro():
 @app.route('/api/login', methods=['POST'])
 @cross_origin()
 def login():
+    data = request.json
     # Obtener datos del formulario de login
-    mail = request.form.get('mail')
-    password = request.form.get('password')
+    mail = data.get('mail')
+    password = data.get('password')
 
     # Conectar a la base de datos
     newConnection = db.connect_and_execute(["SELECT * FROM usuarios"])
