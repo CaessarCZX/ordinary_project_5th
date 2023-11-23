@@ -1,5 +1,5 @@
 from flask import Flask, request, jsonify, session
-from flask_cors import CORS, cross_origin
+from flask_cors import CORS
 import os
 import io
 import jwt
@@ -365,10 +365,12 @@ def edit_user():
                 profile.save(output, format='JPEG', quality=60)
                 
                 # Guardar la imagen en una subcarpeta del proyecto
-                profile_folder = './profiles'
+                profile_folder = './server/profiles'
                 if not os.path.exists(profile_folder):
                     os.makedirs(profile_folder)
                 
+                profile.save(os.path.join(profile_folder, f"{session['user']['iduser']}.jpg"))
+
                 profile_path = os.path.join(profile_folder, f"{session['user']['iduser']}.jpg")
                 with open(profile_path, 'wb') as f:
                     f.write(output.getvalue())
@@ -468,7 +470,7 @@ def create_post():
                 img.save(output, format='JPEG', quality=60)
                 
                 # Guardar la imagen en una subcarpeta del proyecto
-                image_folder = './images'
+                image_folder = './server/images'
                 if not os.path.exists(image_folder):
                     os.makedirs(image_folder)
                 
@@ -624,7 +626,7 @@ def create_comment():
 def get_posts():
     data = request.json
     
-    offset = data.get('offset', 0, type=int)  # Obtiene el offset de la consulta
+    offset = data.get('offset')  # Obtiene el offset de la consulta
     
     # Conectar a la base de datos
     newConnection = db.connect_and_execute(["SELECT * FROM publicaciones"])
@@ -708,14 +710,15 @@ def view_post(id_publicacion):
 def get_comments():
     data = request.json
     
-    offset = data.get('offset', 0, type=int)  # Obtiene el offset de la consulta
+    id_post = data.get('idpost')
+    offset = data.get('offset')  # Obtiene el offset de la consulta
     
     # Conectar a la base de datos
     newConnection = db.connect_and_execute(["SELECT * FROM comentarios"])
     cursor = newConnection.cursor()
 
     # Obtener todas los comentarios
-    cursor.execute("SELECT * FROM comentarios ORDER BY fecha_depublicacioncomentario DESC LIMIT 10 OFFSET %s", (offset,))
+    cursor.execute("SELECT * FROM comentarios WHERE id_publicacion = %s ORDER BY fecha_depublicacioncomentario DESC LIMIT 10 OFFSET %s", (id_post, offset,))
     comments = cursor.fetchall()
 
     # Lista para almacenar las comentarios formateadas
@@ -729,14 +732,11 @@ def get_comments():
         # Obtener la foto de perfil del usuario
         cursor.execute("SELECT foto_perfil FROM usuarios WHERE id_usuario = %s", (comment[1],))
         profile = cursor.fetchone()[0]
-        if profile:
-            profile_bytes = profile
-            profile_decoded =  profile_bytes.decode('utf-8') if profile_bytes else None
         
         # Formatear la publicación
         publicacion_formateada = {
             'username': username,
-            'profile': profile_decoded,
+            'profile': profile,
             'text': comment[3],
             'datepost': comment[4].strftime("%Y-%m-%d %H:%M:%S"),
         }
