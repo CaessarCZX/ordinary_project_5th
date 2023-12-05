@@ -32,7 +32,6 @@ def registro():
     first_name = data.get('firstname')
     last_name = data.get('lastname')
     username = data.get('username')
-    username =  username.lower().strip()
     mail = data.get('email')
     password = data.get('password')
     password = password.encode('utf-8')
@@ -111,7 +110,10 @@ def registro():
         'profile': ' ',
         'phone': ' ',
         'biography': ' ',
-        'sex': ' '
+        'sex': ' ',
+        'friends': [],
+        'posts': [],
+        'likes': []
     }
     session['user'] = userinfo
     payload = {
@@ -156,9 +158,12 @@ def login():
                 'password': userinfo['contrasena_hash'],
                 'birthDate': userinfo['fecha_nacimiento'],
                 'profile': userinfo['foto_perfil'],
-                'birthDate': userinfo['telefono'],
+                'phone': userinfo['telefono'],
                 'biography': userinfo['biografia'],
-                'sex': userinfo['sexo']
+                'sex': userinfo['sexo'],
+                'friends': [],
+                'posts': [],
+                'likes': []
             }
             session['user'] = userinfo
 
@@ -227,9 +232,83 @@ def logout():
     response.delete_cookie('token')
     return response
 
+#Ruta para buscar usuarios
+@app.route('/api/search_users', methods=['POST'])
+def search_users():
+    search_query = request.json['search_query']  # Obtener la cadena de búsqueda
+
+    # Conectar a la base de datos
+    new_connection = db.connect_and_execute(["SELECT * FROM usuario"])
+
+    # Crear un cursor para ejecutar consultas
+    cursor = new_connection.cursor(dictionary=True)
+
+    # Buscar usuarios por nombre de usuario o primer nombre
+    cursor.execute("SELECT * FROM usuarios WHERE username LIKE %s OR nombre LIKE %s",
+        (f'%{search_query}%', f'%{search_query}%'))
+
+    users = cursor.fetchall()
+
+    usersFormatted = []
+
+    # Obtener la información necesaria de los usuarios encontrados
+    for user in users:
+        userinfo = {
+            'iduser': user['id_usuario'],
+            'username': user['username'],
+            'firstname': user['nombre'],
+            'lastname': user['apellido'],
+            'profile': user['foto_perfil']
+        }
+        usersFormatted.append(userinfo)
+
+    # Cerrar el cursor y la conexión
+    cursor.close()
+    new_connection.close()
+
+    return jsonify({'users': usersFormatted}), 200
+
 @app.route('/api/profile', methods=['GET'])
 def profile():
-    userinfo = session.get('user')
+    user = session.get('user')
+
+    userinfo = {
+        'iduser': user['iduser'],
+        'username': user['username'],
+        'firstName': user['firstName'],
+        'lastName': user['lastName'],
+        'mail': user['mail'],
+        'password': user['password'],
+        'birthDate': user['birthDate'],
+        'profile': user['profile'],
+        'phone': user['phone'],
+        'biography': user['biography'],
+        'sex': user['sex'],
+        'posts': '',
+        'likes': ''
+    }
+
+    # Conectar a la base de datos
+    newConnection = db.connect_and_execute(["SELECT * FROM usuario"])
+
+    # Crear un cursor para ejecutar consultas
+    cursor = newConnection.cursor(dictionary=True, buffered=True)
+
+    # Obtener contador de publicaciones
+    cursor.execute("SELECT COUNT(*) FROM publicaciones WHERE id_usuario = %s", (user['iduser'],))
+    posts_count = cursor.fetchone()
+    try:
+        userinfo['posts'] = posts_count[0]
+    except:
+        userinfo['posts'] = 0
+
+    # Obtener contador de likes
+    cursor.execute("SELECT COUNT(*) FROM likes WHERE id_usuario = %s", (user['iduser'],))
+    likes_count = cursor.fetchone()
+    try:
+        userinfo['likes'] = likes_count[0]
+    except:
+        userinfo['likes'] = 0
 
     if userinfo:
         # Decodificar la contraseña hasheada a la original
@@ -239,20 +318,99 @@ def profile():
     else:
         return jsonify({'msg': 'Usuario no autenticado'}), 401
     
-@app.route('/api/user/<string:username>', methods=['GET'])
-def view_user(username):
+@app.route('/api/profile/<string:id_user>', methods=['GET'])
+def view_user(id_user):
     # Conectar a la base de datos
     newConnection = db.connect_and_execute(["SELECT * FROM usuario"])
 
     # Crear un cursor para ejecutar consultas
-    cursor = newConnection.cursor(dictionary=True)
+    cursor = newConnection.cursor(dictionary=True, buffered=True)
 
-    # Buscar el usuario por su ID
-    cursor.execute("SELECT * FROM usuarios WHERE username = %s", (username,))
-    userinfo = cursor.fetchone()
+    # Buscar el usuario por su id
+    cursor.execute("SELECT * FROM usuarios WHERE id_usuario = %s", (id_user,))
+    user = cursor.fetchone()
 
     #Oculta contraseña
-    userinfo['contrasena_hash'] = ' '
+    user['contrasena_hash'] = ' '
+
+    userinfo = {
+        'iduser': user['id_usuario'],
+        'username': user['username'],
+        'firstName': user['nombre'],
+        'lastName': user['apellido'],
+        'mail': user['correo_electronico'],
+        'password': user['contrasena_hash'],
+        'birthDate': user['fecha_nacimiento'],
+        'profile': user['foto_perfil'],
+        'phone': user['telefono'],
+        'biography': user['biografia'],
+        'sex': user['sexo'],
+        'friends': [],
+        'posts': [],
+        'likes': []
+    }
+
+    # Obtener contador de amigos
+    cursor.execute("SELECT * FROM amistades WHERE id_usuarioa = %s OR id_usuariob = %s", 
+                   (userinfo['iduser'], userinfo['iduser']))
+    friends = cursor.fetchall()
+
+    friendsFormatted = []
+
+    for friend in friends:
+        # Formatear la amistad
+        friendshipinfo = {
+            'idlike': friend[0],
+            'idusera': friend[1],
+            'iduserb': friend[2]
+        }
+
+        # Agregar la amistad formateada a la lista
+        friendsFormatted.append(friendshipinfo)
+
+    userinfo['posts'] = friendsFormatted
+
+    # Obtener contador de publicaciones
+    cursor.execute("SELECT * FROM publicaciones WHERE id_usuario = %s", (userinfo['iduser'],))
+    posts = cursor.fetchall()
+
+    postsFormatted = []
+
+    for post in posts:
+        #Formatear las publicaciones
+        postinfo = {
+            'idpost': post["id_publicacion"],
+            'iduser': post["id_usuario"],
+            'text': post["contenido_publicacion"],
+            'datepost': post["fecha_depublicacion"].strftime("%Y-%m-%d %H:%M:%S"),
+            'image': post["imagen"],
+            'reactions': post["reaccion"]
+        }
+
+        # Agregar la publicación formateada a la lista
+        postsFormatted.append(postinfo)
+
+    userinfo['posts'] = postsFormatted
+
+    # Obtener contador de likes
+    cursor.execute("SELECT * FROM likes WHERE id_usuario = %s", (userinfo['iduser'],))
+    likes = cursor.fetchall()
+
+    likesFormatted = []
+
+    for like in likes:
+         #Formatear los likes
+        likeinfo = {
+            'idlike': like[0],
+            'iduser': like[1],
+            'idpost': like[2],
+            'status': like[3],
+        }
+
+         # Agregar el like formateada a la lista
+        likesFormatted.append(likeinfo)
+
+    userinfo['likes'] = likesFormatted
 
     # Cerrar el cursor y la conexión
     cursor.close()
@@ -278,7 +436,7 @@ def edit_user():
     biography = data.get('biography')
     sex = data.get('sex')
 
-    if first_name or last_name:
+    if first_name != "" and last_name  != "":
         # Validar nombre y apellido
         if not re.match("^[A-Za-z]+$", first_name) or not re.match("^[A-Za-z]+$", last_name):
             return jsonify({'msg': 'El nombre y apellido no deben contener números o símbolos'}), 400
@@ -292,10 +450,8 @@ def edit_user():
     # Crear un cursor para ejecutar consultas
     cursor = newConnection.cursor(dictionary=True)
 
-    # Verificar si el nuevo nombre de usuario ya existe
-    if username:
-        username =  username.lower().strip()
-
+    if username != "":
+        # Verificar si el nuevo nombre de usuario ya existe
         cursor.execute("SELECT * FROM usuarios WHERE username = %s", (username,))
         if cursor.fetchone():
             cursor.close()
@@ -304,8 +460,7 @@ def edit_user():
     else:
         username = session['user']['username']
 
-    # Verificar que el nombre de usuario no se repita
-    if mail:
+    if mail != "":
         # Validar correo electrónico
         if not re.match("[^@]+@[^@]+\.[^@]+", mail):
             return jsonify({'msg': 'El correo electrónico debe tener un formato válido'}), 400
@@ -319,7 +474,7 @@ def edit_user():
         mail = session['user']['mail']
 
     # Verificar si se proporcionó una nueva contraseña
-    if password:
+    if password != "":
         sal = bcrypt.gensalt()
         hashedpassword = bcrypt.hashpw(password, sal)
         password = password.encode('utf-8')
@@ -328,7 +483,7 @@ def edit_user():
         hashedpassword = session['user']['password']
     
     # Verificar si se proporcionó una nueva foto de perfil
-    if profile:
+    if profile != "":
         try:
             # Cargar la imagen y comprimirla
             with Image.open(profile) as profile:
@@ -380,15 +535,15 @@ def edit_user():
         profile_path = session['user']['profile']
 
     # Verificar si se proporcionó un telefono
-    if phone == None:
+    if phone == "":
         phone = session['user']['phone']
 
     # Verificar si se proporcionó una biografia
-    if biography == None:
+    if biography == "":
         biography = session['user']['biography']
 
     # Verificar si se proporcionó un sexo
-    if sex == None:
+    if sex == "":
         sex = session['user']['sex']
 
     # Actualizar la información del usuario
@@ -401,14 +556,14 @@ def edit_user():
     newConnection.commit()
 
     # Actualizar la información en la sesión
-    session['user']['firstname'] = first_name if first_name else session['user']['firstName']
-    session['user']['lastName'] = last_name if last_name else session['user']['lastName']
-    session['user']['username'] = username if username else session['user']['username']
-    session['user']['mail'] = mail if mail else session['user']['mail']
-    session['user']['profile'] = profile_path if profile_path else session['user']['profile']
-    session['user']['phone'] = phone if phone else session['user']['phone']
-    session['user']['biography'] = biography if biography else session['user']['biography']
-    session['user']['sex'] = sex if sex else session['user']['sex']
+    session['user']['firstName'] = first_name if first_name != "" else session['user']['firstName']
+    session['user']['lastName'] = last_name if last_name != "" else session['user']['lastName']
+    session['user']['username'] = username if username != "" else session['user']['username']
+    session['user']['mail'] = mail if mail != "" else session['user']['mail']
+    session['user']['profile'] = profile_path if profile != "" else session['user']['profile']
+    session['user']['phone'] = phone if phone != "" else session['user']['phone']
+    session['user']['biography'] = biography if biography != "" else session['user']['biography']
+    session['user']['sex'] = sex if sex != "" else session['user']['sex']
 
     # Cerrar el cursor y la conexión
     cursor.close()
@@ -509,6 +664,14 @@ def create_post():
         'reactions': 0
     }
 
+    # Actualizar la sesión del usuario con la nueva publicación
+    user = session['user']
+    if 'posts' in user:
+        user['posts'].append(postinfo)
+    else:
+        user['posts'] = [postinfo]
+    session['user'] = user
+
     response = jsonify({'msg': '¡Publicación creada con éxito!', 'post': postinfo})
     return response
 
@@ -553,9 +716,6 @@ def likes():
     else:
         cursor.execute("UPDATE likes SET estado = %s WHERE id_publicacion = %s", 
         (status, id_post))
-    
-    cursor.execute("UPDATE publicaciones SET reaccion = %s WHERE id_publicacion = %s",
-    (reaccion, id_post))
 
     # Confirmar la transacción
     newConnection.commit()
@@ -564,13 +724,21 @@ def likes():
     cursor.close()
     newConnection.close()
 
-    # Por ahora, simplemente retornamos los datos proporcionados
+    # Retornar los datos proporcionados
     likeinfo = {
         'idlike': id_likes,
         'iduser': id_user,
         'idpost': id_post,
         'likestatus': status
     }
+
+    # Actualizar la sesión del usuario con la nueva publicación
+    user = session['user']
+    if 'like' in user:
+        user['like'].append(likeinfo)
+    else:
+        user['like'] = [likeinfo]
+    session['like'] = user
 
     response = jsonify({'msg': '¡Like cambiado con éxito!', 'comentario': likeinfo})
     return response
@@ -622,6 +790,7 @@ def create_comment():
     response = jsonify({'msg': '¡Comentario creado con éxito!', 'comment': commentinfo})
     return response
 
+# Ruta para obtener la lista de publicaciones
 @app.route('/api/get_posts', methods=['GET'])
 def get_posts():
     data = request.json
@@ -649,7 +818,7 @@ def get_posts():
         profile = cursor.fetchone()[0]
 
         # Formatear la publicación
-        publicacion_formateada = {
+        postinfo = {
             'username': username,
             'profile': profile,
             'text': post[2],
@@ -659,7 +828,7 @@ def get_posts():
         }
 
         # Agregar la publicación formateada a la lista
-        postsFormatted.append(publicacion_formateada)
+        postsFormatted.append(postinfo)
 
     # Cerrar el cursor y la conexión
     cursor.close()
@@ -667,6 +836,7 @@ def get_posts():
 
     return jsonify(postsFormatted)
 
+# Ruta para acceder a una publicacion en especifico
 @app.route('/api/post/<int:id_publicacion>', methods=['GET'])
 def view_post(id_publicacion):
     # Conectar a la base de datos
@@ -705,7 +875,8 @@ def view_post(id_publicacion):
         return jsonify({'msg': 'Publicación encontrada exitosamente', 'post': postinfo}), 200
     else:
         return jsonify({'msg': 'Publicación no encontrada'}), 404
-    
+
+# Ruta para obtener la lista de comentarios
 @app.route('/api/get_comments', methods=['GET'])
 def get_comments():
     data = request.json
@@ -734,7 +905,7 @@ def get_comments():
         profile = cursor.fetchone()[0]
         
         # Formatear la publicación
-        publicacion_formateada = {
+        commentinfo = {
             'username': username,
             'profile': profile,
             'text': comment[3],
@@ -742,14 +913,15 @@ def get_comments():
         }
 
         # Agregar la publicación formateada a la lista
-        commentsFormatted.append(publicacion_formateada)
+        commentsFormatted.append(commentinfo)
 
     # Cerrar el cursor y la conexión
     cursor.close()
     newConnection.close()
 
     return jsonify(commentsFormatted)
-    
+
+# Ruta para añadir amigos
 @app.route('/api/add_friend', methods=['POST'])
 def add_friend():
     data = request.json
@@ -800,7 +972,52 @@ def add_friend():
     cursor.close()
     newConnection.close()
 
-    response = jsonify({'msg': '¡Amigo creado con éxito!', 'user a': id_user, 'user b': id_user_friend})
+    # Retornar los datos proporcionados
+    friendshipinfo = {
+        'idlike': id_friendship,
+        'idusera': id_user,
+        'iduserb': id_user_friend
+    }
+
+    # Actualizar la sesión del usuario actual
+    user = session['user']
+    if 'friends' in user:
+        user['friends'].append(friendshipinfo)  # Agregar el ID del amigo
+    else:
+        user['friends'] = [friendshipinfo]  # Si no tiene amigos, crear la lista
+    session['user'] = user
+
+    response = jsonify({'msg': '¡Amigo creado con éxito!', 'amistad': friendshipinfo})
+    return response
+
+# Ruta para eliminar amigos
+@app.route('/api/remove_friend', methods=['POST'])
+def remove_friend():
+    data = request.json
+    
+    # Obtener datos para eliminar la amistad
+    id_user = session['user']['iduser']
+    id_user_friend = data.get('iduserfriend')
+    
+    # Conectar a la base de datos
+    newConnection = db.connect_and_execute(["SELECT * FROM amistades"])
+
+    # Crear un cursor para ejecutar consultas
+    cursor = newConnection.cursor(buffered=True, dictionary=True)
+
+    # Eliminar la amistad de la base de datos
+    cursor.execute("DELETE FROM amistades WHERE (id_usuarioa = %s AND id_usuariob = %s) OR (id_usuarioa = %s AND id_usuariob = %s)", 
+                   (id_user, id_user_friend, id_user_friend, id_user))
+
+    # Confirmar la transacción
+    newConnection.commit()
+
+    # Cerrar el cursor y la conexión
+    cursor.close()
+    newConnection.close()
+
+    # Retornar una respuesta indicando que la amistad ha sido eliminada
+    response = jsonify({'msg': '¡Amistad eliminada exitosamente!'})
     return response
 
 if __name__ == '__main__':
