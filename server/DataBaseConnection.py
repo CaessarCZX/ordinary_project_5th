@@ -40,7 +40,6 @@ class DB:
                 apellido VARCHAR(30),
                 correo_electronico VARCHAR(80) UNIQUE,
                 contrasena_hash VARCHAR(128),
-                fecha_nacimiento DATE,
                 foto_perfil VARCHAR(255),
                 telefono VARCHAR(10),
                 biografia TEXT,

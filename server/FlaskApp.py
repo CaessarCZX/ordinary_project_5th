@@ -10,6 +10,7 @@ import bcrypt
 from datetime import datetime, timedelta
 from PIL import Image
 from DataBaseConnection import DB
+from ImageHandler import process_profile_image
 from Mails import send_mail
 
 app = Flask(__name__)
@@ -37,9 +38,6 @@ def registro():
     password = password.encode('utf-8')
     sal = bcrypt.gensalt()
     hashed_password = bcrypt.hashpw(password, sal)
-    year = data.get('year')
-    month = data.get('month')
-    day = data.get('day')
 
     # Validar nombre y apellido
     if not re.match("^[A-Za-z]+(?: [A-Za-z]+)?$", first_name) or not re.match("^[A-Za-z]+(?: [A-Za-z]+)?$", last_name):
@@ -74,19 +72,10 @@ def registro():
         newConnection.close()
         return jsonify({'msg': 'La contraseña debe tener al menos 8 caracteres'}), 400
 
-    # Verificar que el usuario sea mayor de 15 años
-    today = datetime.today()
-        
-    edad = today.year - int(year) - ((today.month, today.day) < (int(month), int(day)))
-    if edad < 15:
-        cursor.close()
-        newConnection.close()
-        return jsonify({'msg': 'Debes tener al menos 15 años para registrarte'}), 400
-
     # Ejecutar el INSERT INTO en la tabla de usuarios
     cursor.execute(
-        "INSERT INTO usuarios (id_usuario, username, nombre, apellido, correo_electronico, contrasena_hash, fecha_nacimiento, foto_perfil, telefono, biografia, sexo) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
-        (id_user, username, first_name, last_name, mail, hashed_password, f"{year}-{month}-{day}", ' ', ' ', ' ', ' ')
+        "INSERT INTO usuarios (id_usuario, username, nombre, apellido, correo_electronico, contrasena_hash, foto_perfil, telefono, biografia, sexo) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+        (id_user, username, first_name, last_name, mail, hashed_password, ' ', ' ', ' ', ' ')
     )
 
     # Confirmar la transacción
@@ -104,14 +93,12 @@ def registro():
         'username': username, 
         'mail': mail,
         'password': ' ',
-        'year': year,
-        'month': month,
-        'day': day,
-        'profile': ' ',
+        'avatar': ' ',
         'phone': ' ',
-        'biography': ' ',
+        'story': ' ',
         'sex': ' ',
         'friends': [],
+        'follows': [],
         'posts': [],
         'likes': []
     }
@@ -146,6 +133,7 @@ def login():
 
     if userinfo:
         hasedpassword = userinfo['contrasena_hash']
+        print(userinfo["contrasena_hash"])
         if bcrypt.checkpw(password.encode('utf-8'), hasedpassword.encode('utf-8')):
             
             # Si las credenciales son válidas, almacenar el usuario en sesión
@@ -155,13 +143,13 @@ def login():
                 'firstName': userinfo['nombre'],
                 'lastName': userinfo['apellido'],
                 'mail': userinfo['correo_electronico'],
-                'password': userinfo['contrasena_hash'],
-                'birthDate': userinfo['fecha_nacimiento'],
-                'profile': userinfo['foto_perfil'],
+                'password': '',
+                'avatar': userinfo['foto_perfil'],
                 'phone': userinfo['telefono'],
-                'biography': userinfo['biografia'],
+                'story': userinfo['biografia'],
                 'sex': userinfo['sexo'],
                 'friends': [],
+                'follows': [],
                 'posts': [],
                 'likes': []
             }
@@ -176,7 +164,7 @@ def login():
                 'exp': datetime.utcnow() + timedelta(hours=1)  # El token expira en 1 hora
             }
             token = jwt.encode(payload, app.config['SECRET_KEY'], algorithm='HS256')
-            response = jsonify({'msg': '¡Inicio de sesión exitoso!', 'accesToken': token, 'usuario': userinfo})
+            response = jsonify({'msg': '¡Inicio de sesión exitoso!', 'accesToken': token, 'user': userinfo})
             response.set_cookie('token', token)
             return response
 
@@ -200,8 +188,8 @@ def login():
         return jsonify({'msg': 'Credenciales incorrectas. Intento fallido.'}), 401
 
 # Ruta para mantener la sesión activa
-@app.route('/api/keep_session', methods=['GET'])
-def keep_session():
+@app.route('/api/refresh_token', methods=['GET'])
+def refresh_token():
     token = request.cookies.get('token')
 
     if token:
@@ -212,7 +200,7 @@ def keep_session():
 
             # Genera un nuevo token y actualiza la cookie
             newtoken = jwt.encode({'user': userToken, 'exp': datetime.utcnow() + timedelta(hours=1)}, app.config['SECRET_KEY'], algorithm='HS256')
-            response = jsonify({'msg': '¡Sesión actualizada!', 'accesToken': newtoken})
+            response = jsonify({'msg': '¡Sesión actualizada!', 'accesToken': newtoken, 'user': userToken})
             response.set_cookie('token', newtoken)
 
             return response
@@ -225,7 +213,7 @@ def keep_session():
     return jsonify({'msg': 'Token no proporcionado'}), 401
 
 # Ruta para cerrar sesión
-@app.route('/api/logout', methods=['GET'])
+@app.route('/api/logout', methods=['POST'])
 def logout():
     session.pop('user', None)
     response = jsonify({'msg': '¡Sesión cerrada exitosamente!'})
@@ -233,9 +221,9 @@ def logout():
     return response
 
 #Ruta para buscar usuarios
-@app.route('/api/search_users', methods=['POST'])
-def search_users():
-    search_query = request.json['search_query']  # Obtener la cadena de búsqueda
+@app.route('/api/search_users/<string:username>', methods=['GET'])
+def search_users(username):
+    search_query = username  # Obtener la cadena de búsqueda
 
     # Conectar a la base de datos
     new_connection = db.connect_and_execute(["SELECT * FROM usuario"])
@@ -258,7 +246,7 @@ def search_users():
             'username': user['username'],
             'firstname': user['nombre'],
             'lastname': user['apellido'],
-            'profile': user['foto_perfil']
+            'avatar': user['foto_perfil']
         }
         usersFormatted.append(userinfo)
 
@@ -267,56 +255,6 @@ def search_users():
     new_connection.close()
 
     return jsonify({'users': usersFormatted}), 200
-
-@app.route('/api/profile', methods=['GET'])
-def profile():
-    user = session.get('user')
-
-    userinfo = {
-        'iduser': user['iduser'],
-        'username': user['username'],
-        'firstName': user['firstName'],
-        'lastName': user['lastName'],
-        'mail': user['mail'],
-        'password': user['password'],
-        'birthDate': user['birthDate'],
-        'profile': user['profile'],
-        'phone': user['phone'],
-        'biography': user['biography'],
-        'sex': user['sex'],
-        'posts': '',
-        'likes': ''
-    }
-
-    # Conectar a la base de datos
-    newConnection = db.connect_and_execute(["SELECT * FROM usuario"])
-
-    # Crear un cursor para ejecutar consultas
-    cursor = newConnection.cursor(dictionary=True, buffered=True)
-
-    # Obtener contador de publicaciones
-    cursor.execute("SELECT COUNT(*) FROM publicaciones WHERE id_usuario = %s", (user['iduser'],))
-    posts_count = cursor.fetchone()
-    try:
-        userinfo['posts'] = posts_count[0]
-    except:
-        userinfo['posts'] = 0
-
-    # Obtener contador de likes
-    cursor.execute("SELECT COUNT(*) FROM likes WHERE id_usuario = %s", (user['iduser'],))
-    likes_count = cursor.fetchone()
-    try:
-        userinfo['likes'] = likes_count[0]
-    except:
-        userinfo['likes'] = 0
-
-    if userinfo:
-        # Decodificar la contraseña hasheada a la original
-        userinfo['password'] = bcrypt.checkpw(session['user']['password'].encode('utf-8'), userinfo['password'].encode('utf-8'))
-
-        return jsonify({'msg': 'Usuario recuperado', 'user': userinfo})
-    else:
-        return jsonify({'msg': 'Usuario no autenticado'}), 401
     
 @app.route('/api/profile/<string:id_user>', methods=['GET'])
 def view_user(id_user):
@@ -340,19 +278,18 @@ def view_user(id_user):
         'lastName': user['apellido'],
         'mail': user['correo_electronico'],
         'password': user['contrasena_hash'],
-        'birthDate': user['fecha_nacimiento'],
-        'profile': user['foto_perfil'],
+        'avatar': user['foto_perfil'],
         'phone': user['telefono'],
-        'biography': user['biografia'],
+        'story': user['biografia'],
         'sex': user['sexo'],
         'friends': [],
+        'follows': [],
         'posts': [],
         'likes': []
     }
 
     # Obtener contador de amigos
-    cursor.execute("SELECT * FROM amistades WHERE id_usuarioa = %s OR id_usuariob = %s", 
-                   (userinfo['iduser'], userinfo['iduser']))
+    cursor.execute("SELECT * FROM amistades WHERE id_usuariob = %s", (userinfo['iduser'],))
     friends = cursor.fetchall()
 
     friendsFormatted = []
@@ -360,15 +297,30 @@ def view_user(id_user):
     for friend in friends:
         # Formatear la amistad
         friendshipinfo = {
-            'idlike': friend[0],
-            'idusera': friend[1],
-            'iduserb': friend[2]
+            'idfrienduser': friend["id_usuarioa"],
         }
 
         # Agregar la amistad formateada a la lista
         friendsFormatted.append(friendshipinfo)
 
-    userinfo['posts'] = friendsFormatted
+    userinfo['friends'] = friendsFormatted
+
+    # Obtener contador de seguidores
+    cursor.execute("SELECT * FROM amistades WHERE id_usuarioa = %s", (userinfo['iduser'],))
+    follows = cursor.fetchall()
+
+    followsFormatted = []
+
+    for follow in follows:
+        # Formatear el seguidor
+        followinginfo = {
+            'idfollowuser': follow["id_usuariob"],
+        }
+
+        # Agregar el seguidor formateada a la lista
+        followsFormatted.append(followinginfo)
+
+    userinfo['follows'] = followsFormatted
 
     # Obtener contador de publicaciones
     cursor.execute("SELECT * FROM publicaciones WHERE id_usuario = %s", (userinfo['iduser'],))
@@ -431,9 +383,9 @@ def edit_user():
     username = data.get('username')
     mail = data.get('email')
     password = data.get('password')
-    profile = data.get('profile')
+    profile = data.get('avatar')
     phone = data.get('phone')
-    biography = data.get('biography')
+    biography = data.get('story')
     sex = data.get('sex')
 
     if first_name != "" and last_name  != "":
@@ -450,7 +402,7 @@ def edit_user():
     # Crear un cursor para ejecutar consultas
     cursor = newConnection.cursor(dictionary=True)
 
-    if username != "":
+    if username != None:
         # Verificar si el nuevo nombre de usuario ya existe
         cursor.execute("SELECT * FROM usuarios WHERE username = %s", (username,))
         if cursor.fetchone():
@@ -460,7 +412,7 @@ def edit_user():
     else:
         username = session['user']['username']
 
-    if mail != "":
+    if mail != None:
         # Validar correo electrónico
         if not re.match("[^@]+@[^@]+\.[^@]+", mail):
             return jsonify({'msg': 'El correo electrónico debe tener un formato válido'}), 400
@@ -474,7 +426,7 @@ def edit_user():
         mail = session['user']['mail']
 
     # Verificar si se proporcionó una nueva contraseña
-    if password != "":
+    if password != None:
         sal = bcrypt.gensalt()
         hashedpassword = bcrypt.hashpw(password, sal)
         password = password.encode('utf-8')
@@ -483,54 +435,10 @@ def edit_user():
         hashedpassword = session['user']['password']
     
     # Verificar si se proporcionó una nueva foto de perfil
-    if profile != "":
-        try:
-            # Cargar la imagen y comprimirla
-            with Image.open(profile) as profile:
-                width, height = profile.size
-                target_width = 200
-                target_height = 200
-                
-                # Calcula las proporciones de redimensionamiento
-                width_ratio = target_width / width
-                height_ratio = target_height / height
-
-                # Escoger el ratio más pequeño para no distorsionar la imagen
-                ratio = min(width_ratio, height_ratio)
-
-                # Calcular las nuevas dimensiones para la imagen redimensionada
-                new_width = int(width * ratio)
-                new_height = int(height * ratio)
-
-                # Redimensionar manteniendo la proporción original
-                profile = profile.resize((new_width, new_height), Image.LANCZOS)
-
-                # Calcular las coordenadas para el recorte centrado
-                left = (new_width - target_width) / 2
-                top = (new_height - target_height) / 2
-                right = (new_width + target_width) / 2
-                bottom = (new_height + target_height) / 2
-
-                # Aplicar el recorte
-                profile = profile.crop((left, top, right, bottom))
-
-                # Guardar la imagen en una subcarpeta del proyecto
-                profile = profile.convert('RGB')
-                output = io.BytesIO()
-                profile.save(output, format='JPEG', quality=60)
-                
-                # Guardar la imagen en una subcarpeta del proyecto
-                profile_folder = './server/profiles'
-                if not os.path.exists(profile_folder):
-                    os.makedirs(profile_folder)
-                
-                profile.save(os.path.join(profile_folder, f"{session['user']['iduser']}.jpg"))
-
-                profile_path = os.path.join(profile_folder, f"{session['user']['iduser']}.jpg")
-                with open(profile_path, 'wb') as f:
-                    f.write(output.getvalue())
-        except Exception as e:
-            return jsonify({'msg': 'Error al procesar la imagen', 'error': str(e)}), 500
+    if profile != None:
+        profile_path = process_profile_image(profile, session['user']['iduser'], "profiles", 200, 200)
+        if profile_path is None:
+            return jsonify({'msg': 'Error al procesar la imagen'}), 500
     else:
         profile_path = session['user']['profile']
 
@@ -540,7 +448,7 @@ def edit_user():
 
     # Verificar si se proporcionó una biografia
     if biography == "":
-        biography = session['user']['biography']
+        biography = session['user']['story']
 
     # Verificar si se proporcionó un sexo
     if sex == "":
@@ -560,9 +468,9 @@ def edit_user():
     session['user']['lastName'] = last_name if last_name != "" else session['user']['lastName']
     session['user']['username'] = username if username != "" else session['user']['username']
     session['user']['mail'] = mail if mail != "" else session['user']['mail']
-    session['user']['profile'] = profile_path if profile != "" else session['user']['profile']
+    session['user']['avatar'] = profile_path if profile != "" else session['user']['avatar']
     session['user']['phone'] = phone if phone != "" else session['user']['phone']
-    session['user']['biography'] = biography if biography != "" else session['user']['biography']
+    session['user']['story'] = biography if biography != "" else session['user']['story']
     session['user']['sex'] = sex if sex != "" else session['user']['sex']
 
     # Cerrar el cursor y la conexión
@@ -588,52 +496,10 @@ def create_post():
         return jsonify({'msg': 'El texto debe tener menos de 150 caracteres'}), 400
 
     # Verificar si se proporciono una imagen
-    if image:
-        try:
-            # Cargar la imagen y comprimirla
-            with Image.open(image) as img:
-                width, height = img.size
-                target_width = 500
-                target_height = 450
-                
-                # Calcula las proporciones de redimensionamiento
-                width_ratio = target_width / width
-                height_ratio = target_height / height
-
-                # Escoger el ratio más pequeño para no distorsionar la imagen
-                ratio = min(width_ratio, height_ratio)
-
-                # Calcular las nuevas dimensiones para la imagen redimensionada
-                new_width = int(width * ratio)
-                new_height = int(height * ratio)
-
-                # Redimensionar manteniendo la proporción original
-                img = img.resize((new_width, new_height), Image.ANTIALIAS)
-
-                # Calcular las coordenadas para el recorte centrado
-                left = (new_width - target_width) / 2
-                top = (new_height - target_height) / 2
-                right = (new_width + target_width) / 2
-                bottom = (new_height + target_height) / 2
-
-                # Aplicar el recorte
-                img = img.crop((left, top, right, bottom))
-
-                # Guardar la imagen en una subcarpeta del proyecto
-                img = img.convert('RGB')
-                output = io.BytesIO()
-                img.save(output, format='JPEG', quality=60)
-                
-                # Guardar la imagen en una subcarpeta del proyecto
-                image_folder = './server/images'
-                if not os.path.exists(image_folder):
-                    os.makedirs(image_folder)
-                
-                image_path = os.path.join(image_folder, f"{id_post}.jpg")
-                with open(image_path, 'wb') as f:
-                    f.write(output.getvalue())
-        except Exception as e:
-            return jsonify({'msg': 'Error al procesar la imagen', 'error': str(e)}), 500
+    if image != None:
+        image_path = process_profile_image(image, id_post, "images", 500, 450)
+        if image_path is None:
+            return jsonify({'msg': 'Error al procesar la imagen'}), 500
 
     # Conectar a la base de datos
     newConnection = db.connect_and_execute(["SELECT * FROM publicaciones"])
@@ -820,7 +686,7 @@ def get_posts():
         # Formatear la publicación
         postinfo = {
             'username': username,
-            'profile': profile,
+            'avatar': profile,
             'text': post[2],
             'datepost': post[3].strftime("%Y-%m-%d %H:%M:%S"),
             'image': post[4],
@@ -865,7 +731,7 @@ def view_post(id_publicacion):
         # Formatear la publicación
         postinfo = {
             'username': username,
-            'profile': profile,
+            'avatar': profile,
             'text': post[2],
             'datepost': post[3].strftime("%Y-%m-%d %H:%M:%S"),
             'image': post[4],
@@ -907,7 +773,7 @@ def get_comments():
         # Formatear la publicación
         commentinfo = {
             'username': username,
-            'profile': profile,
+            'avatar': profile,
             'text': comment[3],
             'datepost': comment[4].strftime("%Y-%m-%d %H:%M:%S"),
         }
@@ -972,22 +838,20 @@ def add_friend():
     cursor.close()
     newConnection.close()
 
-    # Retornar los datos proporcionados
-    friendshipinfo = {
-        'idlike': id_friendship,
-        'idusera': id_user,
-        'iduserb': id_user_friend
+    # Retornar los datos proporcionados (Quien agrega se refleja como following, el agregado es friends)
+    followinginfo = {
+        'idfollowuser': id_user_friend
     }
 
     # Actualizar la sesión del usuario actual
     user = session['user']
-    if 'friends' in user:
-        user['friends'].append(friendshipinfo)  # Agregar el ID del amigo
+    if 'following' in user:
+        user['following'].append(followinginfo)  # Agregar el ID del amigo
     else:
-        user['friends'] = [friendshipinfo]  # Si no tiene amigos, crear la lista
+        user['following'] = [followinginfo]  # Si no tiene amigos, crear la lista
     session['user'] = user
 
-    response = jsonify({'msg': '¡Amigo creado con éxito!', 'amistad': friendshipinfo})
+    response = jsonify({'msg': '¡Amigo creado con éxito!', 'amistad': followinginfo})
     return response
 
 # Ruta para eliminar amigos
@@ -1016,9 +880,20 @@ def remove_friend():
     cursor.close()
     newConnection.close()
 
+    # Retornar los datos proporcionados (Quien agrega se refleja como following, el agregado es friends)
+    followinginfo = {
+        'idfollowuser': id_user_friend
+    }
+
+    # Actualizar la sesión del usuario actual
+    user = session['user']
+    if 'following' in user:
+        user['following'].remove(followinginfo)  # Eliminar el ID del amigo
+    session['user'] = user
+
     # Retornar una respuesta indicando que la amistad ha sido eliminada
     response = jsonify({'msg': '¡Amistad eliminada exitosamente!'})
     return response
 
 if __name__ == '__main__':
-    app.run(port=8000)
+    app.run(host="0.0.0.0", port=8000)
