@@ -1,0 +1,21 @@
+:root {
+  font-family: Inter, sans-serif ,system-ui, system-ui, -apple-system, BlinkMacSystemFont, Avenir, Helvetica, Arial;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-text-size-adjust: 100%;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+.App {
+  width: 100%;
+  min-width: 300px;
+  min-height: 100vh;
+}
