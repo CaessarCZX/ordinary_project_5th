@@ -104,6 +104,7 @@ export const register = (registerData) => async (dispatch) => {
     })
   }
 
+  console.log(registerData)
   try {
     // Dispatcher for loader
     dispatch({

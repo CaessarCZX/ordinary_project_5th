@@ -1,17 +1,18 @@
-from flask import Flask, request, jsonify, session
-from flask_cors import CORS
-import os
 import io
-import jwt
-import secrets
-import re
+import os
 import random
-import bcrypt
+import re
+import secrets
 from datetime import datetime, timedelta
-from PIL import Image
+
+import bcrypt
+import jwt
 from DataBaseConnection import DB
+from flask import Flask, jsonify, request, session
+from flask_cors import CORS
 from ImageHandler import process_profile_image
 from Mails import send_mail
+from PIL import Image
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = secrets.token_hex(32)
@@ -26,6 +27,7 @@ failed_attempts = 0
 # Ruta de registro
 @app.route('/api/register', methods=['POST'])
 def registro():
+    print(data)
     data = request.json
 
     # Obtener datos del formulario de registro

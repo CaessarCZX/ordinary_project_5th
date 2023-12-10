@@ -34,7 +34,9 @@ function App () {
   // get available posts
   useEffect(
     () => {
-      dispatch(getPosts(auth))
+      if (auth.token) {
+        dispatch(getPosts(auth))
+      }
     }, [auth, dispatch])
 
   // Save or delete token in localStorage

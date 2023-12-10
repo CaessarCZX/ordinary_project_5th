@@ -119,7 +119,7 @@ export function Register () {
                   maxLength='50'
                   $isDark={isDark}
                 />
-                <AlertIntoForm value={undefinedToBoolean(alert)}>{alert.email}</AlertIntoForm>
+                {/* <AlertIntoForm value={undefinedToBoolean(alert)}>{alert.email}</AlertIntoForm> */}
               </Div>
               <Div $mBlock='1rem'>
                 <DivFlex>
