@@ -1,4 +1,34 @@
 {
     "workbench.preferredHighContrastColorTheme": "Visual Studio Dark",
-    "workbench.preferredLightColorTheme": "Default High Contrast Light"
+    "workbench.preferredLightColorTheme": "Default High Contrast Light",
+    "sqltools.connections": [
+        {
+            "mysqlOptions": {
+                "authProtocol": "default",
+                "enableSsl": "Disabled"
+            },
+            "previewLimit": 50,
+            "server": "localhost",
+            "port": 3306,
+            "driver": "MySQL",
+            "name": "Leccion1",
+            "database": "clase",
+            "username": "root",
+            "password": "10102003"
+        },
+        {
+            "mysqlOptions": {
+                "authProtocol": "default",
+                "enableSsl": "Disabled"
+            },
+            "previewLimit": 50,
+            "server": "localhost",
+            "port": 3306,
+            "driver": "MySQL",
+            "database": "db_proyectofinal",
+            "username": "root",
+            "name": "Geeknet Database",
+            "password": "10102003"
+        }
+    ]
 }

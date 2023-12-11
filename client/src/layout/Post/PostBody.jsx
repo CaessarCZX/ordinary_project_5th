@@ -3,13 +3,14 @@ import { DivFlex, Text } from '../../styled components/Darth-theme'
 
 export function PostBody ({ theme: isDark, content, images }) {
   const image = images[0]
+  console.log(image)
 
   return (
     <>
       {
         image && (
           <DivFlex $margin='0.5rem 0 0' $height='370px'>
-            <img src={image.secure_url} style={{ width: '100%', objectFit: 'cover' }} alt='image' />
+            <img src={image} style={{ width: '100%', objectFit: 'cover' }} alt='image' />
           </DivFlex>)
       }
 

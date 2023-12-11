@@ -26,6 +26,7 @@ export function Header () {
   // For searchbar
   const [search, setSearch] = useState('')
   const [getUsers, setGetUsers] = useState([])
+  console.log(getUsers)
   const [showResults, setShowResults] = useState(false)
 
   // Redux
@@ -56,7 +57,7 @@ export function Header () {
   useEffect(
     () => {
       if (search && auth.token) {
-        getDataApi(`search?username=${search}`, auth.token)
+        getDataApi(`search/${search}`)
           .then(res => setGetUsers(res.data.users))
           .catch(err => {
             dispatch({

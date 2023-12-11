@@ -7,8 +7,8 @@ class DB:
         self.__user = 'root'
         # self.__password = 'arieljavier' #Contraseña de Gibran
         self.__db = 'db_proyectofinal'
-        # self.__password = '10102003' #Contraseña de Samuel
-        self.__password = '1234' #Contraseña de Cesar
+        self.__password = '10102003' #Contraseña de Samuel
+        # self.__password = '1234' #Contraseña de Cesar
         self.__port = '3306'
 
         # Conectar a la base de datos o crearla si no existe
@@ -36,15 +36,17 @@ class DB:
             """
             CREATE TABLE IF NOT EXISTS usuarios (
                 id_usuario INT PRIMARY KEY NOT NULL,
-                username VARCHAR(35) UNIQUE,
-                nombre VARCHAR(35),
-                apellido VARCHAR(30),
+                username VARCHAR(30) UNIQUE,
+                nombre VARCHAR(90),
+                apellido VARCHAR(90),
                 correo_electronico VARCHAR(80) UNIQUE,
                 contrasena_hash VARCHAR(128),
                 foto_perfil VARCHAR(255),
                 telefono VARCHAR(10),
                 biografia TEXT,
-                sexo VARCHAR(30)
+                sexo VARCHAR(30),
+                direccion VARCHAR(110),
+                sitio_web VARCHAR(110)
             )
             """,
             """

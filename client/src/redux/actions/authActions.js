@@ -62,6 +62,7 @@ export const refreshToken = () => async (dispatch) => {
     try {
       // Get the cookie from back-end
       const { data } = await postDataApi('refresh_token')
+      console.log(data)
       dispatch({
         type: AUTH_TYPES.AUTH,
         payload: {

@@ -1,4 +1,4 @@
-import { patchDataApi, postDataApi } from '../../utils/fetchDataApi.js'
+import { patchDataApi, postDataApi, getDataApi } from '../../utils/fetchDataApi.js'
 import { imageUpload } from '../../utils/imageUpload.js'
 import { ALERT_TYPES } from './alertActions.js'
 
@@ -37,11 +37,11 @@ export const createPost = ({ content, images, auth }) => async (dispatch) => {
     }
 
     // Post in DB
+    console.log({content, images: media})
     // NOTE: The post body is provisionary, while token authorization is missing (user) property
-    const res = await postDataApi('post', {
-      user: auth.user,
+    const res = await postDataApi('create_post', {
       content,
-      images: media
+      images: media[0].secure_url
     }, auth.token)
 
     dispatch({
@@ -72,9 +72,7 @@ export const getPosts = (auth) => async (dispatch) => {
       payload: true
     })
 
-    const res = await postDataApi('posts', {
-      user
-    }, auth.token)
+    const res = await getDataApi('get_posts', auth.token)
 
     dispatch({
       type: POST_TYPES.GET_POSTS,

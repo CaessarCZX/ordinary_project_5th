@@ -22,15 +22,16 @@ export const checkImage = (file) => {
 }
 
 export const imageUpload = async (images) => {
-  const ENDPOINT = `${cloudinaryAPI}/image/upload`
+  const ENDPOINT = `https://api.cloudinary.com/v1_1/dlpahwvim/image/upload`
 
   const imageCollection = []
   for (const items of images) {
     const formData = new FormData()
     formData.append('file', items)
 
-    formData.append('upload_preset', uploadPreset)
-    formData.append('cloud_name', cloudName)
+    formData.append('upload_preset', "pftpoeix")
+    formData.append('cloud_name', "dlpahwvim")
+    console.log(formData)
 
     try {
       const res = await fetch(ENDPOINT, {

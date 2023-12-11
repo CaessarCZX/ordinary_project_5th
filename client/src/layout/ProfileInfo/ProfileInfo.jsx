@@ -37,6 +37,8 @@ export function ProfileInfo () {
   const [userData, setUserData] = useState([])
   const [isSelfUser, setIsSelfUser] = useState(false)
 
+  console.log(userData)
+
   // get user data
   useEffect(
     () => {
@@ -94,7 +96,7 @@ export function ProfileInfo () {
         <Title $small $isDark={isDark}>Mi perfil</Title>
       </ProfileTitle>
       {
-        userData.length > 0 && userData.map(
+        userData?.length > 0 && userData.map(
           (user) => (
             <ProfileContainerGridLayout
               key={user._id}

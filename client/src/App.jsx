@@ -23,6 +23,7 @@ function App () {
   const dispatch = useDispatch()
   const token = useSelector(selectToken)
   const auth = useAuth()
+  console.log(auth)
 
   // get Refresh token in App
   useEffect(() => {

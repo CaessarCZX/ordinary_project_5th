@@ -83,12 +83,36 @@ export const updateProfile = ({ editData, newAvatar, auth }) => async (dispatch)
       }
     }
 
+    console.log(media)
+    const {
+      firstname,
+      lastname,
+      phone,
+      story,
+      gender,
+      address,
+      website,
+    } = editData
     // Update user data
-    const res = await patchDataApi('user', {
-      ...editData,
+    console.log({firstname,
+      lastname,
+      phone,
+      story,
+      gender,
+      address,
+      website, media})
+    const res = await patchDataApi('edit', {
+      firstname,
+      lastname,
+      phone,
+      story,
+      gender,
+      address,
+      website,
       avatar: newAvatar ? media[0].secure_url : auth.user.avatar
     }, auth.token)
 
+    console.log(res)
     dispatch({
       type: AUTH_TYPES.AUTH,
       payload: {

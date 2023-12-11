@@ -19,6 +19,7 @@ export function SideBarMenuItemView ({ sectionItem, isOpen }) {
   const { isDark } = useTheme()
   // get User id
   const user = useDataUser()
+  console.log(typeof user)
 
   // Sections data
   const {

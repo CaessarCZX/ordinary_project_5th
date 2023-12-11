@@ -8,6 +8,7 @@ import { PostFooter } from './PostFooter.jsx'
 import { PostHeader } from './PostHeader.jsx'
 
 export function Post ({ postContent }) {
+  console.log(postContent)
   // Theme
   const { isDark } = useTheme()
 
